@@ -1,0 +1,38 @@
+{% from 'icons.html' import icon %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A privacy-minded data masking workspace powered by explainable Python regular expressions.">
+    <title>{% block title %}Data Masker{% endblock %} · Veil</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body data-page="{{ page }}">
+<a class="skip-link" href="#main">Skip to content</a>
+<aside class="sidebar">
+    <a class="brand" href="{{ url_for('index') }}" aria-label="Veil home"><span class="brand-symbol">{{ icon('shield') }}</span><span>veil<span class="brand-dot">.</span></span></a>
+    <div class="sidebar-label">PRIVACY WORKSPACE</div>
+    <nav aria-label="Main navigation">
+        {% for key, endpoint, glyph, label in [('masker', 'index', 'scan', 'Data Masker'), ('playground', 'playground', 'code', 'Regex Playground'), ('examples', 'examples', 'file', 'Examples'), ('about', 'about', 'info', 'About PDPA')] %}
+        <a class="nav-link {{ 'active' if page == key }}" href="{{ url_for(endpoint) }}" {% if page == key %}aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span>{% if page == key %}<span class="nav-dot"></span>{% endif %}</a>
+        {% endfor %}
+    </nav>
+    <div class="sidebar-bottom">
+        <div class="privacy-note">{{ icon('lock') }}<strong>Privacy by design</strong><p>Your logs stay out of databases.<br>Your next step stays yours.</p><a href="{{ url_for('about') }}#privacy">How we handle data {{ icon('arrow') }}</a></div>
+        <a class="source-link" href="{{ github_url or url_for('about') + '#source-code' }}" {% if github_url %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ icon('github') }}<span>View Source Code</span>{{ icon('external') }}</a>
+        <div class="sidebar-version">THEORY OF COMPUTATION <span>v1.0</span></div>
+    </div>
+</aside>
+<div class="app-shell">
+    <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong>{{ {'masker': 'Data Masker', 'playground': 'Regex Playground', 'examples': 'Examples', 'about': 'About PDPA'}[page] }}</strong></div><div class="session-status"><span class="status-dot"></span>Ephemeral processing {{ icon('lock') }}</div></header>
+    <main id="main">{% block content %}{% endblock %}</main>
+    <footer class="footer"><span>{{ icon('shield') }} Built to reveal less.</span><a class="footer-source" href="{{ github_url or url_for('about') + '#source-code' }}" {% if github_url %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ icon('github') }}View Source Code {{ icon('external') }}</a><span>Python regular expressions <span class="footer-dot">·</span> TOC Assignment 2026</span></footer>
+</div>
+<div id="app-data" hidden data-rules='{{ rules | tojson }}' data-samples='{{ samples | tojson }}' data-limit="{{ max_characters }}"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+<noscript><div class="noscript">Enable JavaScript to scan text and use the interactive tools.</div></noscript>
+</body>
+</html>

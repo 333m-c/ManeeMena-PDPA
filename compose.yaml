@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    ports:
+      - "127.0.0.1:${VEIL_PORT:-8080}:8000"
+    environment:
+      GITHUB_URL: "${GITHUB_URL:-}"

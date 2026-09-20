@@ -1,0 +1,36 @@
+{% from 'icons.html' import icon %}
+{% macro workspace(playground=false) %}
+<section class="workspace panel" aria-label="Masking workspace">
+    <div class="workspace-toolbar"><div class="section-title">{{ icon('code') }}<h2>{{ 'Test your text' if playground else 'Masking workspace' }}</h2><span class="small-badge">UTF-8</span></div><div class="toolbar-actions"><button id="load-sample" class="button button-subtle" type="button">{{ icon('file') }}Load sample log</button><button id="clear" class="button button-subtle" type="button">{{ icon('clear') }}Clear</button></div></div>
+    <div class="editors">
+        <section class="editor input-editor" aria-labelledby="input-label">
+            <div class="editor-heading"><label id="input-label" for="input-log"><span class="editor-number">01</span> Input log</label><div class="segmented" aria-label="Input view"><button type="button" id="edit-view" aria-pressed="true">Edit</button><button type="button" id="detected-view" aria-pressed="false" disabled>Detections</button></div></div>
+            <div class="editor-body"><textarea id="input-log" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="input-help input-count" placeholder="Paste your text or log here…"></textarea><pre id="source-preview" class="code-preview" tabindex="0" aria-label="Highlighted original text" hidden></pre></div>
+            <div class="editor-footer"><span id="input-count">0 characters <span>·</span> 0 lines</span><span id="input-help">Plain text only</span></div>
+        </section>
+        <section class="editor output-editor" aria-labelledby="output-label">
+            <div class="editor-heading"><h3 id="output-label"><span class="editor-number accent">02</span> Masked log</h3><div class="segmented" aria-label="Output view"><button type="button" id="masked-view" aria-pressed="true">Masked</button><button type="button" id="compare-view" aria-pressed="false" disabled>Compare</button></div></div>
+            <div class="editor-body output-body"><div id="output-empty" class="empty-output"><span class="empty-art">{{ icon('shield') }}</span><h3>A little less exposed.</h3><p>Scan your log to find sensitive information<br>and leave only what needs to be seen.</p><span class="empty-hint">5 patterns. One cleaner log.</span></div><pre id="output-log" class="code-preview" tabindex="0" aria-label="Masked output" hidden></pre></div>
+            <div class="editor-footer"><span id="output-count">Waiting for a scan</span><div class="output-actions"><button id="copy" type="button" class="icon-button" disabled title="Copy masked text" aria-label="Copy masked text">{{ icon('copy') }}</button><button id="download" type="button" class="icon-button" disabled title="Download masked log" aria-label="Download masked log">{{ icon('download') }}</button></div></div>
+        </section>
+    </div>
+    <div class="scan-bar"><span class="scan-note">{{ icon('lock') }}Your data is processed temporarily and is not stored.</span><button id="scan" class="button button-primary" type="button">{{ icon('scan') }}<span id="scan-label">{{ 'Test pattern' if playground else 'Scan & Mask' }}</span>{{ icon('arrow') }}</button></div>
+</section>
+<div id="scan-status" class="scan-status" role="status" aria-live="polite">Ready when you are. Edit the example or paste your own log.</div>
+<div id="scan-error" class="error-message" role="alert" hidden></div>
+{% endmacro %}
+
+{% macro inspector() %}
+<section class="panel inspector-panel" aria-labelledby="inspector-heading">
+    <div class="panel-heading"><div class="section-title">{{ icon('scan') }}<h2 id="inspector-heading">Detection inspector</h2><span id="inspector-count" class="count-badge">0</span></div><span class="muted small">Understand every match</span></div>
+    <div id="inspector-empty" class="inspector-empty">{{ icon('scan') }}<div><strong>No detections yet</strong><p>Run a scan to explore matched patterns, locations and masking rules.</p></div></div>
+    <div id="inspector-list" class="inspector-list" hidden></div>
+</section>
+<dialog id="detection-dialog" class="detection-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-heading"><span class="eyebrow">REGEX EXPLAINED</span><button id="close-dialog" type="button" class="icon-button" aria-label="Close detection details">{{ icon('close') }}</button></div>
+    <h2 id="dialog-title">Why was this detected?</h2><p id="dialog-description" class="muted"></p>
+    <label class="field-label">Matched pattern</label><pre id="dialog-pattern" class="pattern-code"></pre>
+    <label class="field-label" id="preview-label">Masked preview</label><pre id="dialog-preview" class="pattern-code"></pre><button type="button" id="reveal-match" class="button button-subtle">Reveal matched text</button>
+    <div id="dialog-tokens" class="token-list"></div>
+</dialog>
+{% endmacro %}

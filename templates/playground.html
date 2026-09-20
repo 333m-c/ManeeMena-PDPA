@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% from 'workspace.html' import workspace, inspector %}
+{% from 'icons.html' import icon %}
+{% block title %}Regex Playground{% endblock %}
+{% block content %}
+<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> UNDERSTAND THE MATCH</div><h1>Small patterns. <span>Clear explanations.</span></h1><p>Explore the exact Python regular expressions behind every masking rule.</p></div><span class="outline-badge">{{ icon('code') }} Python re</span></section>
+<div class="playground-layout"><section class="panel pattern-panel"><div class="panel-heading"><h2>Choose a pattern</h2><span class="small-badge">5 RULES</span></div><div class="pattern-selector" role="group" aria-label="Select a regex rule">{% for rule in rules %}<button type="button" class="pattern-choice" data-rule="{{ rule.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ rule.label }}</button>{% endfor %}</div><div class="pattern-content"><span class="eyebrow" id="pattern-label">CREDIT CARD</span><pre id="pattern-code" class="pattern-code"></pre><p id="pattern-description" class="muted"></p><div class="pattern-note">Pattern and explanations come from the same rule module used for scanning.</div></div></section><section class="panel breakdown-panel"><div class="panel-heading"><h2>Pattern breakdown</h2>{{ icon('code') }}</div><div id="pattern-tokens" class="token-list"></div></section></div>
+{{ workspace(true) }}
+{{ inspector() }}
+{% endblock %}

@@ -1,0 +1,15 @@
+# Allow only runtime sources and dependency manifests into the build context.
+**
+!app.py
+!samples.py
+!requirements.txt
+!requirements-docker.txt
+!regex/
+!regex/**
+!templates/
+!templates/**
+!static/
+!static/**
+**/__pycache__/
+**/*.pyc
+**/*.pyo
