@@ -116,7 +116,6 @@ requirements-docker.txt      Runtime + Gunicorn for Linux containers
 Dockerfile                   Non-root Python/Gunicorn image with a health check
 compose.yaml                 Local container service on port 8080
 .dockerignore                Restricts the build context to runtime files
-prompt.md                    Original project specification (unchanged)
 ```
 
 ## Regular expressions used
