@@ -16,7 +16,7 @@ rather than slotted into the right position by hand.
 
 MEMBERS = [
     {"nickname": "ฟิล์ม", "english": "Film", "student_id": "67010671", "full_name": "ภคพล อวยพร"},
-    {"nickname": "การ์ด", "english": "Guard", "student_id": "67010699", "full_name": "ภัทรวิน ยอดสุขา"},
+    {"nickname": "การ์ด", "english": "Card", "student_id": "67010699", "full_name": "ภัทรวิน ยอดสุขา"},
     {"nickname": "หลง", "english": "Long", "student_id": "67010705", "full_name": "ภาคิน โพธิจรรยากุล"},
     {"nickname": "เดียว", "english": "Deaw", "student_id": "67010852", "full_name": "วีรภัทร พิรุฬห์ธรรม"},
     {"nickname": "เตย", "english": "Toey", "student_id": "67010854", "full_name": "วีรภัทร สว่างจิตต์"},
