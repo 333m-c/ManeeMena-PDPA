@@ -74,18 +74,20 @@ class IndividualRulesTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(mask_dob(text), text)
 
-    def test_address_preserves_everything_except_first_house_number(self):
+    def test_address_masks_one_x_per_digit(self):
+        """The masked house number keeps the length and the slash of the original."""
         tail = " ซอยลาดกระบัง 19 ถนนลาดกระบัง แขวงลาดกระบัง เขตลาดกระบัง กรุงเทพฯ"
-        for number in ("689", "45", "99/12", "12/3", "1"):
+        for number, masked in (("689", "XXX"), ("45", "XX"), ("99/12", "XX/XX"),
+                               ("12/3", "XX/X"), ("1", "X"), ("100200", "XXXXXX")):
             for spacing in ("", " ", "\t  "):
                 text = "Address:" + spacing + number + tail
                 with self.subTest(number=number, spacing=spacing):
-                    self.assertEqual(mask_address(text), "Address:" + spacing + "XXX" + tail)
-        self.assertEqual(mask_address("Address: 12/3 หมู่ 4 ถนน..."), "Address: XXX หมู่ 4 ถนน...")
+                    self.assertEqual(mask_address(text), "Address:" + spacing + masked + tail)
+        self.assertEqual(mask_address("Address: 12/3 หมู่ 4 ถนน..."), "Address: XX/X หมู่ 4 ถนน...")
 
     def test_address_inside_multiline_log(self):
         self.assertEqual(mask_address("Start\nAddress: 45 ถนน...\nAddress: 99/12 ถนน...\nEnd"),
-                         "Start\nAddress: XXX ถนน...\nAddress: XXX ถนน...\nEnd")
+                         "Start\nAddress: XX ถนน...\nAddress: XX/XX ถนน...\nEnd")
 
     def test_address_no_partial_house_number_or_cross_line_match(self):
         for text in ("Address:\n45 ถนน", "Address: 99/12/3 ถนน", "Address: 12-34", "Address: 123abc",
@@ -150,12 +152,15 @@ class MaskerTest(unittest.TestCase):
                 self.assertEqual(mask_text(text)["masked_text"], text)
                 self.assertEqual(mask_text(text)["total_detected"], 0)
 
-    def test_metadata_spans_unicode_crlf_and_length_changes(self):
+    def test_metadata_spans_unicode_and_crlf(self):
         text = "🧪 ภาษาไทย\r\nAddress: 99/12 หมู่ 4\r\nEmail: card@gmail.com\rDOB: 25/12/2549"
         result = mask_text(text)
         self.assertEqual([item["line"] for item in result["detections"]], [2, 3, 4])
-        self.assertEqual(result["masked_characters"], 13)  # 5 house chars + 2 email chars + 6 DOB chars
-        self.assertEqual(result["detections"][1]["output_start"], text.index("card@gmail.com") - 2)
+        self.assertEqual(result["masked_characters"], 12)  # 4 house digits + 2 email chars + 6 DOB chars
+        # Each rule now swaps a character for a character, so output offsets
+        # match input offsets even after three replacements on three lines.
+        self.assertEqual(len(result["masked_text"]), len(text))
+        self.assertEqual(result["detections"][1]["output_start"], text.index("card@gmail.com"))
         edits = []
         for detection in result["detections"]:
             self.assertEqual(result["masked_text"][detection["output_start"]:detection["output_end"]],
@@ -170,7 +175,7 @@ class MaskerTest(unittest.TestCase):
         self.assertEqual(reconstructed, result["masked_text"])
 
     def test_compare_spans_leave_separators_visible(self):
-        text = "1234-5678-9012-3456 093-245-7894 DOB: 25/12/2549"
+        text = "1234-5678-9012-3456 093-245-7894 DOB: 25/12/2549 Address: 99/12"
         result = mask_text(text)
         for detection in result["detections"]:
             for change in detection["changes"]:

@@ -2,6 +2,7 @@
 **
 !app.py
 !samples.py
+!team.py
 !requirements.txt
 !requirements-docker.txt
 !regex/

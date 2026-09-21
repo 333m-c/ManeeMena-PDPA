@@ -5,6 +5,7 @@
   const data = $("app-data");
   const rules = JSON.parse(data.dataset.rules);
   const samples = JSON.parse(data.dataset.samples);
+  const machines = JSON.parse(data.dataset.machines || "{}");
   const ruleMap = Object.fromEntries(rules.map((rule) => [rule.key, rule]));
   const limit = Number(data.dataset.limit);
   const playground = document.body.dataset.page === "playground";
@@ -21,6 +22,9 @@
   let toastTimer;
   let activeDetection = null;
   let revealed = false;
+  let machine = null;
+  let traceStep = -1;
+  let playTimer = null;
 
   const characters = (text) => Array.from(text);
   const formatNumber = (number) => number.toLocaleString("en-US");
@@ -53,7 +57,7 @@
     setText("scan-label", value ? "Scanning…" : playground ? "Test pattern" : "Scan & Mask");
   }
 
-  function invalidate(message = "Input or rules changed. Scan again to update your results.") {
+  function invalidate(message = "Input or rules changed. Scan again.") {
     revision += 1;
     if (controller) controller.abort();
     controller = null;
@@ -75,7 +79,7 @@
     $("inspector-list").hidden = true;
     $("inspector-empty").hidden = false;
     $("inspector-empty").querySelector("strong").textContent = "No detections yet";
-    $("inspector-empty").querySelector("p").textContent = "Run a scan to explore matched patterns, locations and masking rules.";
+    $("inspector-empty").querySelector("p").textContent = "Run a scan to explore the matches.";
     setText("inspector-count", "0");
     setText("stat-detected", "—");
     setText("stat-masked", "—");
@@ -166,7 +170,7 @@
     $("inspector-empty").hidden = result.detections.length > 0;
     if (!result.detections.length) {
       $("inspector-empty").querySelector("strong").textContent = "No matches in this scan";
-      $("inspector-empty").querySelector("p").textContent = "Only enabled patterns are checked. Review your log before sharing it.";
+      $("inspector-empty").querySelector("p").textContent = "Only the enabled patterns were checked.";
     }
     setText("inspector-count", formatNumber(result.total_detected));
   }
@@ -229,13 +233,13 @@
       const unchanged = payload.detections.filter((detection) => !detection.changes.length).length;
       const allDisabled = Object.values(enabledRules()).every((enabled) => !enabled);
       setText("scan-status", allDisabled
-        ? "All rules are disabled. Output is unchanged; no patterns were checked."
-        : `Scan complete. ${payload.total_detected} ${payload.total_detected === 1 ? "match" : "matches"} found.${unchanged ? ` ${unchanged} short email ${unchanged === 1 ? "username remains" : "usernames remain"} visible under the assignment policy.` : " Review the result before sharing."}`);
+        ? "All rules are disabled, so nothing was checked."
+        : `Scan complete · ${payload.total_detected} ${payload.total_detected === 1 ? "match" : "matches"}.${unchanged ? ` ${unchanged} short email ${unchanged === 1 ? "username stays" : "usernames stay"} visible.` : ""}`);
     } catch (error) {
       if (scanRevision !== revision) return;
-      setText("scan-error", timedOut ? "The scan timed out. Try a smaller log or scan again." : error instanceof TypeError || error instanceof SyntaxError ? "Unable to reach the masking service. Check the server and try again." : error.message);
+      setText("scan-error", timedOut ? "The scan timed out. Try a smaller log." : error instanceof TypeError || error instanceof SyntaxError ? "Unable to reach the masking service." : error.message);
       $("scan-error").hidden = false;
-      setText("scan-status", "Scan unsuccessful. Your input is still available.");
+      setText("scan-status", "Scan unsuccessful. Your input is still here.");
     } finally {
       clearTimeout(timeout);
       if (scanRevision === revision) { controller = null; busy(false); }
@@ -314,12 +318,76 @@
 
   function loadSample() {
     input.value = playground ? ruleMap[selectedRule].sample : samples[0].text;
-    invalidate("Fictional sample loaded. Ready to scan.");
+    invalidate("Sample loaded. Ready to scan.");
   }
   $("load-sample").addEventListener("click", loadSample);
+
+  function accept(text, origin) {
+    if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text)) {
+      toast("That looks like a binary file, not text.");
+      return;
+    }
+    if (characters(text).length > limit) {
+      toast(`Too long: keep it within ${formatNumber(limit)} characters.`);
+      return;
+    }
+    input.value = text;
+    inputView = "edit";
+    invalidate(`${origin} Ready to scan.`);
+    input.focus();
+  }
+
+  $("upload").addEventListener("click", () => $("file-input").click());
+  $("file-input").addEventListener("change", async (event) => {
+    const [file] = event.target.files;
+    event.target.value = "";
+    if (!file) return;
+    try {
+      accept(await file.text(), `Loaded ${file.name}.`);
+    } catch {
+      toast("That file could not be read as UTF-8 text.");
+    }
+  });
+  $("paste").addEventListener("click", async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) {
+        toast("Your clipboard is empty.");
+        return;
+      }
+      accept(text, "Pasted from the clipboard.");
+    } catch {
+      toast("The browser blocked clipboard access. Press Ctrl+V in the box instead.");
+      inputView = "edit";
+      renderViews();
+      input.focus();
+    }
+  });
+  const dropZone = $("drop-zone");
+  ["dragenter", "dragover"].forEach((name) => dropZone.addEventListener(name, (event) => {
+    if (![...event.dataTransfer.types].includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    dropZone.classList.add("dropping");
+  }));
+  ["dragleave", "dragend"].forEach((name) => dropZone.addEventListener(name, (event) => {
+    if (event.target === dropZone || name !== "dragleave") dropZone.classList.remove("dropping");
+  }));
+  dropZone.addEventListener("drop", async (event) => {
+    const [file] = event.dataTransfer.files;
+    if (!file) return;
+    event.preventDefault();
+    dropZone.classList.remove("dropping");
+    try {
+      accept(await file.text(), `Loaded ${file.name}.`);
+    } catch {
+      toast("That file could not be read as UTF-8 text.");
+    }
+  });
+
   $("clear").addEventListener("click", () => {
     input.value = "";
-    invalidate("Workspace cleared. Paste a log or load a sample to begin.");
+    invalidate("Workspace cleared.");
     $("toast").hidden = true;
     input.focus();
   });
@@ -353,6 +421,235 @@
     toast("Masked log downloaded.");
   });
 
+  // ---- Automaton drawing -------------------------------------------------
+  // Each rule ships the states and transitions its pattern expands to, plus a
+  // replay of its own sample produced by the same Python module that scans.
+  const SVG = "http://www.w3.org/2000/svg";
+  const RADIUS = 20, COLUMN = 118, BASE_ROW = 88, LOOP_ROOM = 48, SKIP_ROOM = 54, MARGIN = 46, EDGE_PAD = 34;
+  const PROBE = Array.from("0123456789AZaz_.-+%@/: \t");
+
+  const shape = (name, attributes, text) => {
+    const node = document.createElementNS(SVG, name);
+    for (const key in attributes) node.setAttribute(key, attributes[key]);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+  const reads = (symbol) => new RegExp(`^(?:${symbol})$`);
+  // Classes are shown as written; a single literal gets quotes so a hyphen or
+  // a dot reads as a symbol rather than a stray mark.
+  const symbolText = (edge) => {
+    if (edge.kind === "skip") return "ε";
+    if (edge.symbol.startsWith("[")) return edge.symbol;
+    return `'${edge.symbol.replace(/^\\/, "")}'`;
+  };
+
+  function classify(current) {
+    const branching = current.states.some((state, index) => {
+      const out = current.edges.filter((edge) => edge.from === index);
+      if (out.some((edge) => edge.kind === "skip") && out.length > 1) return true;
+      const tests = out.filter((edge) => edge.kind !== "skip").map((edge) => reads(edge.symbol));
+      return PROBE.some((character) => tests.filter((test) => test.test(character)).length > 1);
+    });
+    return `${branching ? "NFA" : "DFA"} · ${current.states.length} states · ${current.edges.length} transitions`;
+  }
+
+  function drawMachine(current) {
+    const rows = [];
+    current.states.forEach((state, index) => (rows[state.row] = rows[state.row] || []).push(index));
+    const hasLoop = rows.map((row) => current.edges.some((edge) => edge.kind === "loop" && row.includes(edge.from)));
+    const hasSkip = rows.map((row) => current.edges.some((edge) => edge.kind === "skip" && row.includes(edge.from)));
+    const tops = rows.map(() => 0);
+    rows.forEach((row, index) => {
+      tops[index] = index === 0
+        ? EDGE_PAD + RADIUS + (hasLoop[0] ? LOOP_ROOM : 0)
+        : tops[index - 1] + BASE_ROW + (hasSkip[index - 1] ? SKIP_ROOM : 0) + (hasLoop[index] ? LOOP_ROOM : 0);
+    });
+    // Widen the columns for long character classes so a label never runs past
+    // the two states it belongs to.
+    const column = Math.max(COLUMN, Math.max(...current.edges.map((edge) => symbolText(edge).length)) * 8 + 30);
+    const at = [];
+    rows.forEach((row, rowIndex) => row.forEach((state, index) => {
+      at[state] = { x: MARGIN + RADIUS + index * column, y: tops[rowIndex] };
+    }));
+    const width = MARGIN * 2 + RADIUS * 2 + (Math.max(...rows.map((row) => row.length)) - 1) * column;
+    const height = tops[tops.length - 1] + RADIUS + EDGE_PAD + (hasSkip[hasSkip.length - 1] ? SKIP_ROOM : 0);
+    const root = shape("svg", { viewBox: `0 0 ${width} ${height}`, width, height, class: "machine-svg" });
+
+    const defs = shape("defs");
+    for (const variant of ["read", "mask", "skip", "live"]) {
+      const marker = shape("marker", { id: `head-${variant}`, viewBox: "0 0 10 10", refX: "8.5", refY: "5",
+        markerWidth: "9", markerHeight: "9", markerUnits: "userSpaceOnUse", orient: "auto" });
+      marker.append(shape("path", { d: "M0 0 10 5 0 10Z", class: `head head-${variant}` }));
+      defs.append(marker);
+    }
+    root.append(defs);
+
+    const first = at[0];
+    root.append(shape("path", { class: "edge-line", "marker-end": "url(#head-read)",
+      d: `M ${first.x - RADIUS - 28} ${first.y} L ${first.x - RADIUS - 5} ${first.y}` }));
+    root.append(shape("text", { class: "machine-hint", x: first.x - RADIUS - 17, y: first.y - 14, "text-anchor": "middle" }, "start"));
+
+    current.edges.forEach((edge, index) => {
+      const from = at[edge.from];
+      const to = at[edge.to];
+      let path;
+      let label;
+      if (edge.kind === "loop") {
+        path = `M ${from.x - 11} ${from.y - RADIUS + 3} C ${from.x - 38} ${from.y - RADIUS - 36} ${from.x + 38} ${from.y - RADIUS - 36} ${from.x + 11} ${from.y - RADIUS + 3}`;
+        label = { x: from.x, y: from.y - RADIUS - 32 };
+      } else if (edge.kind === "skip") {
+        path = `M ${from.x} ${from.y + RADIUS + 2} C ${from.x + 26} ${from.y + RADIUS + 40} ${to.x - 26} ${to.y + RADIUS + 40} ${to.x} ${to.y + RADIUS + 4}`;
+        label = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + RADIUS + 54 };
+      } else if (from.y === to.y) {
+        path = `M ${from.x + RADIUS + 3} ${from.y} L ${to.x - RADIUS - 5} ${to.y}`;
+        label = { x: (from.x + to.x) / 2, y: from.y - 13 };
+      } else {
+        const right = width - 16;
+        const left = 16;
+        const lane = from.y + RADIUS + (hasSkip[current.states[edge.from].row] ? SKIP_ROOM : 0) + 22;
+        const bend = 12;
+        path = `M ${from.x + RADIUS + 3} ${from.y} H ${right - bend} Q ${right} ${from.y} ${right} ${from.y + bend}`
+          + ` V ${lane - bend} Q ${right} ${lane} ${right - bend} ${lane} H ${left + bend}`
+          + ` Q ${left} ${lane} ${left} ${lane + bend} V ${to.y - bend} Q ${left} ${to.y} ${left + bend} ${to.y} H ${to.x - RADIUS - 5}`;
+        label = { x: (left + right) / 2, y: lane - 10 };
+      }
+      const group = shape("g", { class: `edge edge-${edge.kind}${edge.masked ? " masked" : ""}`, "data-edge": index });
+      group.append(shape("title", {}, `${symbolText(edge)} — ${edge.meaning}`));
+      group.append(shape("path", { class: "edge-hit", d: path }));
+      group.append(shape("path", { class: "edge-line", d: path,
+        "marker-end": `url(#head-${edge.masked ? "mask" : edge.kind === "skip" ? "skip" : "read"})` }));
+      group.append(shape("text", { class: "edge-label", x: label.x, y: label.y, "text-anchor": "middle" }, symbolText(edge)));
+      root.append(group);
+    });
+
+    current.states.forEach((state, index) => {
+      const spot = at[index];
+      const group = shape("g", { class: `state state-${state.kind}${state.guards.length ? " guarded" : ""}`, "data-state": index });
+      const detail = state.guards.map((guard) => `${guard.symbol} — ${guard.meaning}`).join("\n");
+      group.append(shape("title", {}, detail || `State ${state.id}`));
+      if (state.guards.length) group.append(shape("circle", { class: "state-guard", cx: spot.x, cy: spot.y, r: RADIUS + 6 }));
+      group.append(shape("circle", { class: "state-ring", cx: spot.x, cy: spot.y, r: RADIUS }));
+      if (state.kind === "accept") group.append(shape("circle", { class: "state-inner", cx: spot.x, cy: spot.y, r: RADIUS - 4.5 }));
+      group.append(shape("text", { class: "state-label", x: spot.x, y: spot.y + 4, "text-anchor": "middle" }, state.id));
+      root.append(group);
+    });
+
+    $("machine-canvas").replaceChildren(root);
+  }
+
+  function renderTape(current) {
+    const points = characters(current.input);
+    const last = current.trace.length ? current.trace[current.trace.length - 1].end : current.offset;
+    const fragment = document.createDocumentFragment();
+    const plain = (text) => {
+      if (!text) return;
+      const span = document.createElement("span");
+      span.className = "tape-outside";
+      span.textContent = text;
+      fragment.append(span);
+    };
+    plain(points.slice(0, current.offset).join(""));
+    for (let index = current.offset; index < last; index += 1) {
+      const cell = document.createElement("span");
+      cell.className = "tape-cell";
+      cell.dataset.index = index;
+      cell.textContent = points[index] === " " ? "␣" : points[index];
+      fragment.append(cell);
+    }
+    plain(points.slice(last).join(""));
+    $("machine-tape").replaceChildren(fragment);
+  }
+
+  function showTrace() {
+    const move = traceStep >= 0 ? machine.trace[traceStep] : null;
+    const state = move ? move.to : 0;
+    const head = move ? move.end : machine.offset;
+    const canvas = $("machine-canvas");
+    canvas.querySelectorAll(".state").forEach((node) => node.classList.toggle("current", Number(node.dataset.state) === state));
+    canvas.querySelectorAll(".edge").forEach((node) => node.classList.toggle("active", !!move && Number(node.dataset.edge) === move.edge));
+    $("machine-tape").querySelectorAll(".tape-cell").forEach((cell) => {
+      const index = Number(cell.dataset.index);
+      cell.classList.toggle("read", index < head);
+      cell.classList.toggle("head", index === head);
+    });
+    const done = traceStep >= machine.trace.length - 1;
+    $("machine-step").disabled = done;
+    if (!move) {
+      setText("machine-caption", `${machine.states[0].id} is the start state. Step through the sample to watch the machine read it.`);
+      return;
+    }
+    const edge = machine.edges[move.edge];
+    const destination = `${move.to === edge.from ? "stays in" : "moves to"} ${machine.states[move.to].id}`;
+    const action = edge.kind === "skip"
+      ? `takes the ε bypass to ${machine.states[move.to].id}`
+      : `reads “${move.text}” and ${destination}`;
+    setText("machine-caption", `${machine.states[edge.from].id} ${action} · ${edge.meaning}${done ? " · accepted" : ""}`);
+  }
+
+  function stopPlaying() {
+    clearInterval(playTimer);
+    playTimer = null;
+    setText("machine-play-label", "Run sample");
+    $("machine-play").classList.remove("playing");
+  }
+
+  function renderMachine(key) {
+    machine = machines[key];
+    if (!machine) return;
+    stopPlaying();
+    traceStep = -1;
+    setText("machine-badge", classify(machine));
+    drawMachine(machine);
+    renderTape(machine);
+    showTrace();
+  }
+
+  function stepMachine() {
+    if (!machine || traceStep >= machine.trace.length - 1) return false;
+    traceStep += 1;
+    showTrace();
+    return traceStep < machine.trace.length - 1;
+  }
+
+  if (playground) {
+    $("machine-step").addEventListener("click", () => {
+      stopPlaying();
+      stepMachine();
+    });
+    $("machine-reset").addEventListener("click", () => {
+      stopPlaying();
+      traceStep = -1;
+      showTrace();
+    });
+    $("machine-play").addEventListener("click", () => {
+      if (playTimer) {
+        stopPlaying();
+        return;
+      }
+      if (traceStep >= machine.trace.length - 1) traceStep = -1;
+      setText("machine-play-label", "Pause");
+      $("machine-play").classList.add("playing");
+      showTrace();
+      playTimer = setInterval(() => {
+        if (!stepMachine()) stopPlaying();
+      }, 620);
+    });
+    $("machine-canvas").addEventListener("click", (event) => {
+      const edge = event.target.closest(".edge");
+      if (edge) {
+        const detail = machine.edges[Number(edge.dataset.edge)];
+        setText("machine-caption", `${symbolText(detail)} · ${detail.meaning}`);
+        return;
+      }
+      const state = event.target.closest(".state");
+      if (!state) return;
+      const guards = machine.states[Number(state.dataset.state)].guards;
+      setText("machine-caption", guards.length
+        ? guards.map((guard) => `${guard.symbol} · ${guard.meaning}`).join("  ")
+        : `${machine.states[Number(state.dataset.state)].id} reads the next character and moves on.`);
+    });
+  }
+
   function selectPattern(key) {
     selectedRule = key;
     const rule = ruleMap[key];
@@ -361,6 +658,7 @@
     setText("pattern-code", rule.pattern);
     setText("pattern-description", rule.description);
     renderTokens($("pattern-tokens"), rule);
+    renderMachine(key);
     loadSample();
   }
   if (playground) {
