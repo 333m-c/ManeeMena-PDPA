@@ -91,14 +91,15 @@ class AppTest(unittest.TestCase):
         self.assertEqual(page.count('class="member-blank"'), blank)
 
     def test_about_us_prints_the_details_it_is_given(self):
-        roster = [{"nickname": "Cat", "student_id": "67011031", "full_name": "Somchai Jaidee"}]
+        roster = [{"nickname": "ไชย", "english": "Chai", "student_id": "67011031",
+                   "full_name": "Somchai Jaidee"}]
         with patch("app.TEAM", roster):
             page = self.client.get("/about-us").get_data(as_text=True)
         self.assertEqual(page.count('class="panel member-card"'), 1)
         self.assertNotIn("member-blank", page)
-        for value in ("Cat", "67011031", "Somchai Jaidee"):
+        for value in ("ไชย", "67011031", "Somchai Jaidee"):
             self.assertIn(value, page)
-        self.assertIn('class="member-avatar">C<', page)
+        self.assertIn('class="member-avatar">C<', page)  # from the romanised nickname
 
     def test_rule_catalog_has_real_patterns(self):
         self.assertEqual(self.client.get("/api/rules").get_json()["rules"], [rule.public() for rule in RULES])
