@@ -2,7 +2,6 @@
 {% from 'icons.html' import icon %}
 {% block title %}Examples{% endblock %}
 {% block content %}
-<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> MADE FOR EXPLORING</div><h1>A few logs. <span>A lot to discover.</span></h1><p>Fictional data for a hands-on look at matching, masking and the limits of regex.</p></div></section>
+<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> MADE FOR EXPLORING</div><h1>A few logs. <span>A lot to discover.</span></h1></div></section>
 <div class="example-grid">{% for sample in samples %}<article class="panel example-card"><div class="example-card-top"><span class="example-number">0{{ loop.index }}</span><span class="small-badge">{{ sample.tag }}</span></div><h2>{{ sample.title }}</h2><p class="muted">{{ sample.description }}</p><pre class="example-code">{{ sample.text }}</pre><a class="button button-secondary" href="{{ url_for('index', sample=sample.id) }}">Open in Data Masker {{ icon('arrow') }}</a></article>{% endfor %}</div>
-<div class="callout">{{ icon('info') }}<p>These examples are fictional. Names, unlabelled dates and numbers without the required hyphens are intentionally outside the five assignment rules.</p></div>
 {% endblock %}

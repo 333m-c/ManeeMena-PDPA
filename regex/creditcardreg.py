@@ -1,7 +1,7 @@
 """Reuse the original four groups and preserve the final four digits."""
 
 import re
-from .rule import Rule, group_edit
+from .rule import Rule, Step, group_edit
 
 PATTERN = re.compile(r"(?<![\w-])(?P<first>[0-9]{4})-(?P<second>[0-9]{4})-(?P<third>[0-9]{4})-(?P<last>[0-9]{4})(?![\w-])")
 
@@ -19,6 +19,15 @@ RULE = Rule(
      ("-", "A literal hyphen, preserved in the result."),
      (r"(?![\w-])", "Do not end inside a word or a longer hyphenated number.")),
     "Card: 1234-5678-9012-3456", _edits,
+    (Step(r"(?<![\w-])", "Left boundary: the match may not start inside a word or a longer hyphenated number.", guard=True),
+     Step("[0-9]", "Group 1 digit, replaced with X.", times=4, masked=True),
+     Step(r"\-", "Literal hyphen, kept in the output.", row=True),
+     Step("[0-9]", "Group 2 digit, replaced with X.", times=4, masked=True),
+     Step(r"\-", "Literal hyphen, kept in the output.", row=True),
+     Step("[0-9]", "Group 3 digit, replaced with X.", times=4, masked=True),
+     Step(r"\-", "Literal hyphen, kept in the output.", row=True),
+     Step("[0-9]", "Group 4 digit, the four that stay visible.", times=4),
+     Step(r"(?![\w-])", "Right boundary: the number has to end here.", guard=True)),
 )
 
 

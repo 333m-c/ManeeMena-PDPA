@@ -1,7 +1,7 @@
 """Reuse the original email character classes and first/last-character policy."""
 
 import re
-from .rule import Edit, Rule
+from .rule import Edit, Rule, Step
 
 # The left guard also excludes '*', so already-masked usernames are not
 # reinterpreted as a shorter email starting after the masking characters.
@@ -25,6 +25,13 @@ RULE = Rule(
      (r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "A domain with a literal dot and a suffix of at least two letters."),
      (r"(?![A-Za-z0-9_@\-])", "Prevent a partial match before another email character.")),
     "Email: somchai.d@company.com", _edits,
+    (Step(r"(?<![A-Za-z0-9._%+@*\-])", "Left boundary: not the tail of a longer or already-masked address.", guard=True),
+     Step(r"[A-Za-z0-9._%+\-]", "Username character; the loop is the + quantifier. Only the middle ones become *.", loop=True, masked=True),
+     Step("@", "The literal separator.", row=True),
+     Step("[A-Za-z0-9.-]", "Domain character; this class also contains the dot, which is what makes the machine nondeterministic.", loop=True),
+     Step(r"\.", "The dot in front of the suffix."),
+     Step("[A-Za-z]", "Suffix letter; two are required and the loop allows more.", times=2, loop=True, row=True),
+     Step(r"(?![A-Za-z0-9_@\-])", "Right boundary: the address has to end here.", guard=True)),
 )
 
 

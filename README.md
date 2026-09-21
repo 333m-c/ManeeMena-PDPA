@@ -1,6 +1,6 @@
-# Veil · PDPA Data Masking
+# ManeeMena · PDPA Data Masking
 
-A privacy workspace for a **Theory of Computation** assignment. Veil detects five types of personal information in text logs using **Python's standard-library `re` module**, partially masks them, and explains each match. The English interface supports Thai text and emoji.
+A privacy workspace for a **Theory of Computation** assignment. ManeeMena detects five types of personal information in text logs using **Python's standard-library `re` module**, partially masks them, and explains each match. The English interface supports Thai text and emoji.
 
 The original exercises in `regex/` are retained and turned into reusable modules. Detection and masking never use JavaScript regex, external detection libraries, AI or third-party services.
 
@@ -47,17 +47,17 @@ Stop following logs with `Ctrl+C`; `docker compose down` stops and removes this 
 Optional settings can be placed in an untracked `.env` file alongside `compose.yaml`:
 
 ```dotenv
-VEIL_PORT=8080
+MANEEMENA_PORT=8080
 GITHUB_URL=https://github.com/YOUR_ACCOUNT/YOUR_REPOSITORY
 ```
 
-`VEIL_PORT` changes the host port; leave `GITHUB_URL` unset until the real repository is available. Compose publishes only on `127.0.0.1`. The local Python server can continue to use port 5000 independently. `.dockerignore` excludes the virtual environment, Git metadata, tests, screenshots and environment files from the build context.
+`MANEEMENA_PORT` changes the host port; leave `GITHUB_URL` unset until the real repository is available. Compose publishes only on `127.0.0.1`. The local Python server can continue to use port 5000 independently. `.dockerignore` excludes the virtual environment, Git metadata, tests, screenshots and environment files from the build context.
 
 To use only the Dockerfile without Compose:
 
 ```sh
-docker build -t veil-masker .
-docker run --rm --name veil-masker -p 127.0.0.1:8080:8000 veil-masker
+docker build -t maneemena-masker .
+docker run --rm --name maneemena-masker -p 127.0.0.1:8080:8000 maneemena-masker
 ```
 
 Use either the Compose or standalone command for port 8080, not both at once. The container serves the same application and five masking rules as the local setup. Gunicorn is a container-only dependency in `requirements-docker.txt`, so Windows local installs remain unchanged.
@@ -71,8 +71,11 @@ Use either the Compose or standalone command for port 8080, not both at once. Th
 | Statistics | Total matches, individual rule counts, original characters concealed and enabled rule count. |
 | Before / After | **Compare** highlights only replaced spans; separators and visible digits remain unhighlighted. |
 | Regex Playground | `/regex-playground` displays the actual compiled patterns and token explanations, with a sample and live test for each rule. |
+| State machine diagram | Each pattern is drawn as the automaton it expands to: one state per character read, self-loops for `+` and `*`, dashed ε arcs for optional parts and dashed rings for lookarounds. **Run sample** walks the rule's own sample through it one transition at a time. |
 | Rule toggles | Disable/enable each rule. Disabled rules are neither detected nor counted; all start enabled. |
 | Sample logs | Load a fictional customer log or choose one of three scenarios on `/examples`. |
+| About Us | `/about-us` shows one card per team member — nickname, student ID and full name — read from `team.py`. Fields left empty render as a blank line. |
+| Bring your own text | **Upload** a plain-text file, **Paste** from the clipboard, or drop a file on the input box. Binary files and text past the 50,000-character limit are refused. |
 | Demo risk | Safe = 0, Low = 1–2, Medium = 3–5, High = 6–10, Critical = 11+ enabled-rule matches. |
 | Inspector | Review masked previews and original line numbers; click a row or highlight to explain it. |
 | Copy, download, clear | Copy masked output, download UTF-8 `masked_log.txt`, or discard the workspace. |
@@ -95,16 +98,17 @@ Loading, empty, error and no-match states are included. Changing input or rules 
 ```text
 app.py                       Flask app factory, routes, validation and privacy headers
 samples.py                   Bundled fictional logs
+team.py                      About Us roster: nickname, student ID and full name
 regex/
   __init__.py                Local package; no third-party regex package required
-  rule.py                    Shared rule metadata and replacement spans
+  rule.py                    Shared rule metadata, replacement spans and state-machine steps
   masker.py                  Registry, scan orchestration, counts and positions
   creditcardreg.py            Original credit-card exercise, refactored
   gmailreg.py                 Original email exercise, refactored
   phonereg.py                 Original phone exercise, adapted to the assignment
   birthdayreg.py              Original DOB exercise, refactored
   address.py                 Original address exercise, relaxed to match the specification
-templates/                   Dashboard, workspace, Playground, Examples and About
+templates/                   Dashboard, workspace, Playground, Examples and About Us
 static/css/style.css         Responsive navy / mint dashboard
 static/js/app.js             UI, safe highlights, requests and client-side export
 tests/test_regex.py          Rule regressions, boundaries, overlaps and span metadata
@@ -202,12 +206,13 @@ DOB: 25/12/2549  → DOB: XX/XX/25XX
 - The exact `Address:` label and optional horizontal whitespace establish context.
 - `[0-9]+` matches one or more house-number digits.
 - `(?:/[0-9]+)?` is an optional slash and more digits. `(?:...)` groups without capturing; `?` means zero or one occurrence.
-- `(?P<house>...)` captures the entire house number. Its replacement is always `XXX`, regardless of original length.
+- `(?P<house>...)` captures the entire house number. Each digit inside it becomes one `X`, so the masked number keeps its original length; a slash between the two parts stays visible.
 - The final guard prevents hiding just a prefix of `12/3/4`, `12-34` or `123abc`.
 - No full address grammar is required; remaining text is preserved, including soi and village numbers.
 
 ```text
-Address: 99/12 ถนนสุขุมวิท หมู่ 4 → Address: XXX ถนนสุขุมวิท หมู่ 4
+Address: 99/12 ถนนสุขุมวิท หมู่ 4 → Address: XX/XX ถนนสุขุมวิท หมู่ 4
+Address: 689 ซอยลาดกระบัง → Address: XXX ซอยลาดกระบัง
 ```
 
 ### Reuse and changes from the original code
@@ -218,7 +223,7 @@ Address: 99/12 ถนนสุขุมวิท หมู่ 4 → Address: XXX
 | `gmailreg.py` | Email character classes and first/last username policy | Match throughout logs instead of validating the entire input; remove `input()`; add guards/spans. Preserve the `email_parse` helper. |
 | `phonereg.py` | Numeric regex exercise | Replace the old `^0[689]\d{8}$` validator with the required hyphenated format and add masking. |
 | `birthdayreg.py` | `DOB:` context and preserved year prefix | Accept/preserve spaces and tabs; remove import-time reads of `data.txt` and writes to `censored.txt`. |
-| `address.py` | Leading house number, optional `/digits`, `XXX` replacement | Remove full-address validation and start-of-input restriction; support log lines. Unmatched text passes through instead of returning `Not an address`. Preserve `censor_house_number`. |
+| `address.py` | Leading house number, optional `/digits`, one `X` per digit | Remove full-address validation and start-of-input restriction; support log lines. Unmatched text passes through instead of returning `Not an address`. Preserve `censor_house_number`. |
 
 Each rule exposes its compiled pattern, explanation and edit callback through one `Rule` object. `re.sub` applies its edits. The unified masker finds matches on the **original** text and builds output with consistent metadata. Overlaps resolve leftmost first, then longest at the same position. A card-shaped email username therefore becomes one email detection rather than overlapping detections. This prevents double counting and broken highlighting.
 
@@ -276,7 +281,7 @@ Response:
 ```
 
 - Offsets are **zero-based Unicode code-point indexes**, end-exclusive. Lines are one-based; LF, CRLF and CR are supported. JavaScript uses `Array.from(text)` to avoid UTF-16/emoji offset errors.
-- `masked_characters` counts original characters replaced, including a house number's slash. Replacing `99/12` with `XXX` contributes five, not three.
+- `masked_characters` counts original characters replaced, never separators. Replacing `99/12` with `XX/XX` contributes four, because the slash is kept.
 - Omitted `rules`, or missing keys, default to enabled. Values must be JSON booleans; unknown rule keys are rejected.
 - Empty/whitespace-only text and malformed requests return HTTP 400. Non-JSON content returns 415. More than 50,000 code points or a body larger than 1 MiB returns 413.
 - Errors use `{"success": false, "error": "..."}` without echoing the submitted log.
@@ -374,7 +379,7 @@ $env:GITHUB_URL = "https://github.com/YOUR_ACCOUNT/YOUR_REPOSITORY"
 
 On macOS/Linux: `GITHUB_URL=https://github.com/YOUR_ACCOUNT/YOUR_REPOSITORY .venv/bin/python app.py`.
 
-Only HTTPS URLs on `github.com` are accepted. Without one, the source button links to the About page's “Repository link not configured” section; no fake project repository is linked.
+Only HTTPS URLs on `github.com` are accepted. Without one, no source link is shown at all; no fake project repository is linked.
 
 - Local demo: **http://127.0.0.1:5000**
 - Docker demo: **http://127.0.0.1:8080**
@@ -385,4 +390,4 @@ Only HTTPS URLs on `github.com` are accepted. Without one, the source button lin
 
 - [Python `re` documentation](https://docs.python.org/3/library/re.html) — matching, groups, lookarounds and substitution.
 - [Flask documentation](https://flask.palletsprojects.com/en/stable/) — setup, requests and test clients.
-- [Thailand PDPA on the Ministry of Digital Economy and Society website](https://www.mdes.go.th/law/detail/3577-Personal-Data--Protection-Act-B-E--) — background reading linked from About PDPA.
+- [Thailand PDPA on the Ministry of Digital Economy and Society website](https://www.mdes.go.th/law/detail/3577-Personal-Data--Protection-Act-B-E--) — background reading for the assignment.
