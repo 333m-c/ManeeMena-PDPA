@@ -2131,9 +2131,8 @@ mark {
   border:1px solid #2a4941;
   background:#16332e;
   color:var(--accent);
-  font-family:var(--mono);
   font-size:16px;
-  font-weight:600
+  font-weight:650
 }
 
 .member-slot {
@@ -2167,7 +2166,7 @@ mark {
   font-size:15px;
   line-height:1.5;
   min-height:23px;
-  overflow-wrap:anywhere
+  overflow-wrap:break-word
 }
 
 .member-student_id {

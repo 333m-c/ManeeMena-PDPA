@@ -8,7 +8,7 @@ from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
 from regex.masker import RULES, RULE_MAP, mask_text
 from samples import SAMPLES
-from team import FIELDS, TEAM
+from team import FIELDS, TEAM, initial
 
 MAX_CHARACTERS = 50_000
 
@@ -45,7 +45,7 @@ def create_app(test_config=None):
 
     @app.get("/about-us")
     def about_us():
-        return render_template("about_us.html", page="team", team=TEAM, fields=FIELDS)
+        return render_template("about_us.html", page="team", team=TEAM, fields=FIELDS, initial=initial)
 
     @app.get("/api/rules")
     def rule_catalog():
