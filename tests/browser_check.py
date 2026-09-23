@@ -235,8 +235,8 @@ class BrowserTest(unittest.TestCase):
                 page.locator("#machine-step").click()
             expect(page.locator("#machine-caption")).to_contain_text("accepted")
             expect(page.locator(".tape-cell:not(.read)")).to_have_count(0)
-            self.assertEqual(page.locator(".state.current .state-label").inner_text(),
-                             page.locator(".state-accept .state-label").inner_text())
+            self.assertEqual(page.locator(".state.current .state-label").text_content(),
+                             page.locator(".state-accept .state-label").text_content())
             page.locator("#machine-reset").click()
             expect(page.locator(".tape-cell.read")).to_have_count(0)
         page.screenshot(path=str(self.artifacts / "machine.png"), full_page=True)
@@ -249,7 +249,82 @@ class BrowserTest(unittest.TestCase):
             self.scan()
             expect(page.locator("#stat-risk")).to_have_text(label)
             expect(page.locator("#stat-masked")).to_have_text("00")
-        expect(page.locator("#scan-status")).to_contain_text("11 short email usernames remain visible")
+        expect(page.locator("#scan-status")).to_contain_text("11 short email usernames stay visible")
+
+    def test_machine_uses_custom_input_and_stops_when_edited(self):
+        page = self.page
+        page.goto(self.url + "/regex-playground")
+        page.locator('.pattern-choice[data-rule="email"]').click()
+        text = "🧪 Mail: jane@example.co.th."
+        page.locator("#input-log").fill(text)
+        expect(page.locator(".tape-cell")).to_have_count(0)
+        page.locator("#machine-step").click()
+        expect(page.locator(".tape-cell.read")).to_have_count(1)
+        self.assertEqual("".join(page.locator(".tape-cell").all_text_contents()), "jane@example.co.th")
+        for _ in range(30):
+            if page.locator("#machine-step").is_disabled():
+                break
+            page.locator("#machine-step").click()
+        expect(page.locator("#machine-caption")).to_contain_text("accepted")
+        expect(page.locator(".state-accept.current")).to_have_count(1)
+        page.locator("#machine-reset").click()
+        expect(page.locator(".tape-cell.read")).to_have_count(0)
+        page.locator("#machine-play").click()
+        expect(page.locator("#machine-play-label")).to_have_text("Pause")
+        page.locator("#input-log").fill("user@example.com123")
+        expect(page.locator("#machine-play-label")).to_have_text("Run input")
+        expect(page.locator(".edge.active")).to_have_count(0)
+        page.locator("#machine-play").click()
+        expect(page.locator("#machine-caption")).to_contain_text("No match")
+        expect(page.locator("#machine-step")).to_be_disabled()
+        page.locator('.pattern-choice[data-rule="phone"]').click()
+        expect(page.locator("#input-log")).to_have_value("user@example.com123")
+        page.locator("#clear").click()
+        expect(page.locator("#machine-tape")).to_be_empty()
+        expect(page.locator("#machine-play")).to_be_disabled()
+        page.locator("#load-sample").click()
+        expect(page.locator("#machine-play")).to_be_enabled()
+
+    def test_machine_uses_uploaded_and_pasted_text(self):
+        page = self.page
+        page.goto(self.url + "/regex-playground")
+        page.locator('.pattern-choice[data-rule="phone"]').click()
+        page.locator("#file-input").set_input_files({"name": "phone.txt", "mimeType": "text/plain",
+                                                     "buffer": b"Call: 111-222-3333"})
+        self.scan()
+        self.assertEqual("".join(page.locator(".tape-cell").all_text_contents()), "111-222-3333")
+        page.evaluate("navigator.clipboard.writeText('Call: 555-666-7777')")
+        page.locator("#paste").click()
+        page.locator("#machine-step").click()
+        expect(page.locator(".tape-cell.read")).to_have_count(1)
+        self.assertEqual("".join(page.locator(".tape-cell").all_text_contents()), "555-666-7777")
+
+    def test_machine_ignores_stale_response_and_recovers_from_failure(self):
+        page = self.page
+        page.goto(self.url + "/regex-playground")
+        page.locator("#input-log").fill("4444-5555-6666-7777")
+        page.evaluate("""() => {
+          const realFetch = window.fetch;
+          window.fetch = (...args) => realFetch(...args).then(response =>
+            new Promise(resolve => { window.releaseScan = () => resolve(response); }));
+        }""")
+        page.locator("#machine-play").click()
+        page.wait_for_function("typeof window.releaseScan === 'function'")
+        page.locator("#input-log").fill("Changed input")
+        page.evaluate("window.releaseScan()")
+        expect(page.locator("#machine-tape")).to_have_text("Changed input")
+        expect(page.locator("#machine-play-label")).to_have_text("Run input")
+        expect(page.locator(".tape-cell")).to_have_count(0)
+        expect(page.locator("#copy")).to_be_disabled()
+        page.reload()
+        page.locator("#input-log").fill("4444-5555-6666-7777")
+        page.route("**/api/mask", lambda route: route.abort())
+        page.locator("#machine-play").click()
+        expect(page.locator("#machine-caption")).to_contain_text("Unable to test")
+        expect(page.locator("#machine-play")).to_be_enabled()
+        page.unroute("**/api/mask")
+        page.locator("#machine-step").click()
+        expect(page.locator(".tape-cell.read")).to_have_count(1)
 
     def test_mobile_layout_navigation_and_workflow(self):
         page = self.page

@@ -102,36 +102,48 @@ def build_machine(steps) -> dict:
     return {"states": states, "edges": edges}
 
 
-def trace_machine(machine: dict, text: str, start: int) -> list:
-    """Replay ``text`` through the machine, preferring the next required read.
+def trace_machine(machine: dict, text: str, start: int, end: int) -> list:
+    """Find an accepting path for the exact span chosen by Python's regex.
 
-    Transitions are tried forward, then as a repeat, then as a bypass, which
-    reproduces the engine's result for the bundled samples; the test-suite
-    checks the replay against the real match for every rule.
+    Explore alternative NFA branches and check guards at their real positions.
+    Keep predecessors instead of copying paths or recursing for long inputs.
     """
     edges = machine["edges"]
     accept = len(machine["states"]) - 1
-    position, state, moves = start, 0, []
-    for _ in range(len(text) + len(edges) + 1):
-        options = [index for index, edge in enumerate(edges) if edge["from"] == state]
-        order = [index for kind in ("read", "loop", "skip")
-                 for index in options if edges[index]["kind"] == kind and (kind != "read" or edges[index]["to"] != state)]
-        for index in order:
+    outgoing = [[] for _ in machine["states"]]
+    tests = [None if edge["kind"] == "skip" else re.compile(edge["symbol"]) for edge in edges]
+    guards = [[re.compile(guard["symbol"]) for guard in state["guards"]] for state in machine["states"]]
+    for index, edge in enumerate(edges):
+        outgoing[edge["from"]].append(index)
+    initial = (0, start)
+    pending = [initial]
+    previous = {initial: None}
+    while pending:
+        state, position = current = pending.pop()
+        # Accept-state guards apply when leaving its final repetition, not
+        # between characters consumed by a loop on that state.
+        if (state != accept or position == end) and not all(guard.match(text, position) for guard in guards[state]):
+            continue
+        if state == accept and position == end:
+            moves = []
+            while previous[current] is not None:
+                parent, index = previous[current]
+                moves.append({"edge": index, "to": current[0], "start": parent[1],
+                              "end": current[1], "text": text[parent[1]:current[1]]})
+                current = parent
+            return moves[::-1]
+        for index in reversed(outgoing[state]):
             edge = edges[index]
             if edge["kind"] == "skip":
-                moves.append({"edge": index, "to": edge["to"], "start": position, "end": position, "text": ""})
-                state = edge["to"]
-                break
-            if position < len(text) and re.fullmatch(edge["symbol"], text[position]):
-                moves.append({"edge": index, "to": edge["to"], "start": position,
-                              "end": position + 1, "text": text[position]})
-                state, position = edge["to"], position + 1
-                break
-        else:
-            break
-        if state == accept and not any(edge["from"] == accept and edge["kind"] == "loop" for edge in edges):
-            break
-    return moves
+                target = (edge["to"], position)
+            elif position < end and tests[index].fullmatch(text[position]):
+                target = (edge["to"], position + 1)
+            else:
+                continue
+            if target not in previous:
+                previous[target] = (current, index)
+                pending.append(target)
+    return []
 
 
 @dataclass(frozen=True)
@@ -158,13 +170,16 @@ class Rule:
     def mask(self, text: str) -> str:
         return self.pattern.sub(self.replace, text)
 
-    def machine(self) -> dict:
-        """States, transitions and a replay of this rule's own sample."""
+    def machine(self, text: str | None = None) -> dict:
+        """States, transitions and a replay of the first match in the input."""
+        if text is None:
+            text = self.sample
         machine = build_machine(self.steps)
-        match = self.pattern.search(self.sample)
-        machine["input"] = self.sample
+        match = self.pattern.search(text)
+        machine["input"] = text
+        machine["matched"] = match is not None
         machine["offset"] = match.start() if match else 0
-        machine["trace"] = trace_machine(machine, self.sample, machine["offset"]) if match else []
+        machine["trace"] = trace_machine(machine, text, match.start(), match.end()) if match else []
         return machine
 
     def public(self) -> dict:

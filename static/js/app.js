@@ -23,6 +23,7 @@
   let activeDetection = null;
   let revealed = false;
   let machine = null;
+  let machineReady = false;
   let traceStep = -1;
   let playTimer = null;
 
@@ -55,6 +56,7 @@
     $("scan").disabled = value;
     $("scan").closest(".workspace").setAttribute("aria-busy", String(value));
     setText("scan-label", value ? "Scanning…" : playground ? "Test pattern" : "Scan & Mask");
+    if (playground) updateMachineControls();
   }
 
   function invalidate(message = "Input or rules changed. Scan again.") {
@@ -94,6 +96,7 @@
     rules.forEach((rule) => setText(`count-${rule.key}`, enabled[rule.key] ? "Ready to detect" : "Disabled"));
     updateCounters();
     renderViews();
+    if (playground && machine) resetMachineInput();
   }
 
   // Python offsets count Unicode code points, while JS string offsets count
@@ -205,7 +208,7 @@
       $("scan-error").hidden = false;
       setText("scan-status", "Your text has not been sent.");
       input.focus();
-      return;
+      return false;
     }
     const scanRevision = revision;
     controller = new AbortController();
@@ -216,11 +219,11 @@
     try {
       const response = await fetch("/api/mask", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, rules: enabledRules() }), signal: requestController.signal,
+        body: JSON.stringify({ text, rules: enabledRules(), ...(playground ? { trace_rule: selectedRule } : {}) }), signal: requestController.signal,
         cache: "no-store",
       });
       const payload = await response.json();
-      if (scanRevision !== revision) return;
+      if (scanRevision !== revision) return false;
       if (!response.ok || !payload.success) throw new Error(payload.error || "The scan could not be completed.");
       result = payload;
       scannedText = text;
@@ -230,16 +233,26 @@
       updateResultStats();
       renderInspector();
       renderViews();
+      if (playground) {
+        machine = payload.machine;
+        machineReady = true;
+        traceStep = -1;
+        renderTape(machine);
+        showTrace();
+      }
       const unchanged = payload.detections.filter((detection) => !detection.changes.length).length;
       const allDisabled = Object.values(enabledRules()).every((enabled) => !enabled);
       setText("scan-status", allDisabled
         ? "All rules are disabled, so nothing was checked."
         : `Scan complete · ${payload.total_detected} ${payload.total_detected === 1 ? "match" : "matches"}.${unchanged ? ` ${unchanged} short email ${unchanged === 1 ? "username stays" : "usernames stay"} visible.` : ""}`);
+      return true;
     } catch (error) {
-      if (scanRevision !== revision) return;
+      if (scanRevision !== revision) return false;
       setText("scan-error", timedOut ? "The scan timed out. Try a smaller log." : error instanceof TypeError || error instanceof SyntaxError ? "Unable to reach the masking service." : error.message);
       $("scan-error").hidden = false;
       setText("scan-status", "Scan unsuccessful. Your input is still here.");
+      if (playground) setText("machine-caption", "Unable to test this input. Try again.");
+      return false;
     } finally {
       clearTimeout(timeout);
       if (scanRevision === revision) { controller = null; busy(false); }
@@ -422,8 +435,7 @@
   });
 
   // ---- Automaton drawing -------------------------------------------------
-  // Each rule ships the states and transitions its pattern expands to, plus a
-  // replay of its own sample produced by the same Python module that scans.
+  // Python supplies the states, transitions and a replay of the current input.
   const SVG = "http://www.w3.org/2000/svg";
   const RADIUS = 20, COLUMN = 118, BASE_ROW = 88, LOOP_ROOM = 48, SKIP_ROOM = 54, MARGIN = 46, EDGE_PAD = 34;
   const PROBE = Array.from("0123456789AZaz_.-+%@/: \t");
@@ -572,10 +584,26 @@
       cell.classList.toggle("read", index < head);
       cell.classList.toggle("head", index === head);
     });
-    const done = traceStep >= machine.trace.length - 1;
-    $("machine-step").disabled = done;
+    const done = machineReady && traceStep >= machine.trace.length - 1;
+    updateMachineControls();
+    if (!machineReady) {
+      setText("machine-caption", !input.value.trim()
+        ? "Enter text in Input log above, or load a sample."
+        : characters(input.value).length > limit
+          ? "Keep your input within 50,000 characters."
+          : "Input changed. Run input, Step or Test pattern to update the machine.");
+      return;
+    }
+    if (!machine.matched) {
+      setText("machine-caption", "No match for this pattern in your input. Edit Input log and try again.");
+      return;
+    }
+    if (!machine.trace.length) {
+      setText("machine-caption", "A match was found, but its path could not be drawn.");
+      return;
+    }
     if (!move) {
-      setText("machine-caption", `${machine.states[0].id} is the start state. Step through the sample to watch the machine read it.`);
+      setText("machine-caption", `${machine.states[0].id} is the start state. Step through the first match in your input.`);
       return;
     }
     const edge = machine.edges[move.edge];
@@ -583,25 +611,44 @@
     const action = edge.kind === "skip"
       ? `takes the ε bypass to ${machine.states[move.to].id}`
       : `reads “${move.text}” and ${destination}`;
-    setText("machine-caption", `${machine.states[edge.from].id} ${action} · ${edge.meaning}${done ? " · accepted" : ""}`);
+    const accepted = done && machine.matched && machine.states[move.to].kind === "accept";
+    setText("machine-caption", `${machine.states[edge.from].id} ${action} · ${edge.meaning}${accepted ? " · accepted" : ""}`);
+  }
+
+  function updateMachineControls() {
+    const unavailable = $("scan").disabled || !input.value.trim() || characters(input.value).length > limit
+      || (machineReady && !machine?.trace.length);
+    $("machine-play").disabled = unavailable;
+    $("machine-step").disabled = unavailable || (machineReady && traceStep >= machine.trace.length - 1);
+    $("machine-reset").disabled = $("scan").disabled || !machineReady || !machine?.trace.length;
   }
 
   function stopPlaying() {
     clearInterval(playTimer);
     playTimer = null;
-    setText("machine-play-label", "Run sample");
+    setText("machine-play-label", "Run input");
     $("machine-play").classList.remove("playing");
   }
 
   function renderMachine(key) {
-    machine = machines[key];
-    if (!machine) return;
+    drawMachine(machines[key]);
+    setText("machine-badge", classify(machines[key]));
+    resetMachineInput();
+  }
+
+  function resetMachineInput() {
     stopPlaying();
     traceStep = -1;
-    setText("machine-badge", classify(machine));
-    drawMachine(machine);
+    const sample = machines[selectedRule];
+    machineReady = input.value === sample.input;
+    machine = machineReady ? sample : { ...sample, input: input.value, offset: 0, trace: [], matched: null };
     renderTape(machine);
     showTrace();
+  }
+
+  async function prepareMachine() {
+    if (!machineReady && !await scan()) return false;
+    return machineReady && machine.matched && machine.trace.length > 0;
   }
 
   function stepMachine() {
@@ -612,20 +659,21 @@
   }
 
   if (playground) {
-    $("machine-step").addEventListener("click", () => {
+    $("machine-step").addEventListener("click", async () => {
       stopPlaying();
-      stepMachine();
+      if (await prepareMachine()) stepMachine();
     });
     $("machine-reset").addEventListener("click", () => {
       stopPlaying();
       traceStep = -1;
       showTrace();
     });
-    $("machine-play").addEventListener("click", () => {
+    $("machine-play").addEventListener("click", async () => {
       if (playTimer) {
         stopPlaying();
         return;
       }
+      if (!await prepareMachine()) return;
       if (traceStep >= machine.trace.length - 1) traceStep = -1;
       setText("machine-play-label", "Pause");
       $("machine-play").classList.add("playing");
@@ -651,6 +699,7 @@
   }
 
   function selectPattern(key) {
+    const useSample = !machine || input.value === ruleMap[selectedRule].sample;
     selectedRule = key;
     const rule = ruleMap[key];
     document.querySelectorAll(".pattern-choice").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.rule === key)));
@@ -659,7 +708,8 @@
     setText("pattern-description", rule.description);
     renderTokens($("pattern-tokens"), rule);
     renderMachine(key);
-    loadSample();
+    if (useSample) loadSample();
+    else invalidate("Pattern changed. Ready to test your text.");
   }
   if (playground) {
     document.querySelectorAll(".pattern-choice").forEach((button) => button.addEventListener("click", () => selectPattern(button.dataset.rule)));

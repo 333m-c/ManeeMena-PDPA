@@ -71,11 +71,11 @@ Use either the Compose or standalone command for port 8080, not both at once. Th
 | Statistics | Total matches, individual rule counts, original characters concealed and enabled rule count. |
 | Before / After | **Compare** highlights only replaced spans; separators and visible digits remain unhighlighted. |
 | Regex Playground | `/regex-playground` displays the actual compiled patterns and token explanations, with a sample and live test for each rule. |
-| State machine diagram | Each pattern is drawn as the automaton it expands to: one state per character read, self-loops for `+` and `*`, dashed ε arcs for optional parts and dashed rings for lookarounds. **Run sample** walks the rule's own sample through it one transition at a time. |
+| State machine diagram | Each pattern is drawn as the automaton it expands to: one state per character read, self-loops for `+` and `*`, dashed ε arcs for optional parts and dashed rings for lookarounds. **Run input** and **Step** use the editable Input log above the graph and walk its first match. **Test pattern** also updates the graph; changing text clears the old walk. |
 | Rule toggles | Disable/enable each rule. Disabled rules are neither detected nor counted; all start enabled. |
 | Sample logs | Load a fictional customer log or choose one of three scenarios on `/examples`. |
 | About Us | `/about-us` shows one card per team member — nickname, student ID and full name — read from `team.py`. Fields left empty render as a blank line. |
-| Bring your own text | **Upload** a plain-text file, **Paste** from the clipboard, or drop a file on the input box. Binary files and text past the 50,000-character limit are refused. |
+| Bring your own text | **Upload**, **Paste**, **Sample** and **Clear** sit inside the Input log panel on both workspace pages. Upload a plain-text file, paste from the clipboard, or drop a file on the input box. Binary files and text past the 50,000-character limit are refused. |
 | Demo risk | Safe = 0, Low = 1–2, Medium = 3–5, High = 6–10, Critical = 11+ enabled-rule matches. |
 | Inspector | Review masked previews and original line numbers; click a row or highlight to explain it. |
 | Copy, download, clear | Copy masked output, download UTF-8 `masked_log.txt`, or discard the workspace. |
@@ -287,6 +287,7 @@ Response:
 - Errors use `{"success": false, "error": "..."}` without echoing the submitted log.
 - Responses contain masked previews and spans, not separate raw-match copies. Explicit reveal reads the existing input in browser memory.
 - `GET /api/rules` returns the actual compiled pattern strings, descriptions, token explanations and fictional examples.
+- Playground requests include `trace_rule` with an enabled rule key. The response then also includes `machine`: states, transitions, the submitted input, whether it matched, and a replay of its first match using Unicode code-point offsets. NFA branches are explored until the exact Python match is consumed; no-match input has an empty replay. Ordinary scans omit this field and keep the response above.
 
 ## Example input and output
 

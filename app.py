@@ -73,7 +73,13 @@ def create_app(test_config=None):
         if any(type(value) is not bool for value in settings.values()):
             return error("Each rule must be true or false.")
         enabled = [key for key in RULE_MAP if settings.get(key, True)]
-        return jsonify(success=True, **mask_text(text, enabled))
+        trace_rule = payload.get("trace_rule")
+        if "trace_rule" in payload and (not isinstance(trace_rule, str) or trace_rule not in enabled):
+            return error("Choose an enabled masking rule to trace.")
+        result = mask_text(text, enabled)
+        if trace_rule is not None:
+            result["machine"] = RULE_MAP[trace_rule].machine(text)
+        return jsonify(success=True, **result)
 
     def error(message, status=400):
         return jsonify(success=False, error=message), status

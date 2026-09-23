@@ -5,18 +5,20 @@
 {% block content %}
 <section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> UNDERSTAND THE MATCH</div><h1>Small patterns. <span>Drawn as machines.</span></h1></div><span class="outline-badge">{{ icon('code') }} Python re</span></section>
 <div class="pattern-selector panel" role="group" aria-label="Select a regex rule">{% for rule in rules %}<button type="button" class="pattern-choice rule-{{ rule.key }}" data-rule="{{ rule.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ rule.label }}</button>{% endfor %}</div>
+{{ workspace(true) }}
 <section class="panel machine-panel" aria-labelledby="machine-heading">
     <div class="panel-heading">
         <div class="section-title">{{ icon('graph') }}<h2 id="machine-heading">State machine</h2><span id="machine-badge" class="small-badge">NFA</span></div>
         <div class="machine-controls">
-            <button type="button" id="machine-play" class="button button-subtle">{{ icon('play') }}<span id="machine-play-label">Run sample</span></button>
+            <button type="button" id="machine-play" class="button button-subtle">{{ icon('play') }}<span id="machine-play-label">Run input</span></button>
             <button type="button" id="machine-step" class="button button-subtle">{{ icon('step') }}Step</button>
             <button type="button" id="machine-reset" class="button button-subtle">{{ icon('reset') }}Reset</button>
         </div>
     </div>
+    <p class="machine-help">Uses the Input log above. Edit your text, then run or step through its first match.</p>
     <div id="machine-canvas" class="machine-canvas" role="img" aria-labelledby="machine-heading machine-caption"></div>
     <div id="machine-tape" class="machine-tape"></div>
-    <p id="machine-caption" class="machine-caption"></p>
+    <p id="machine-caption" class="machine-caption" role="status" aria-live="polite"></p>
     <div class="machine-legend">
         <span><i class="legend-state"></i>state</span>
         <span><i class="legend-accept"></i>accept</span>
@@ -36,6 +38,5 @@
         <div id="pattern-tokens" class="token-list"></div>
     </section>
 </div>
-{{ workspace(true) }}
 {{ inspector() }}
 {% endblock %}

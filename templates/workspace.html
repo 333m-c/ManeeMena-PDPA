@@ -1,13 +1,16 @@
 {% from 'icons.html' import icon %}
 {% macro workspace(playground=false) %}
 <section class="workspace panel" aria-label="Masking workspace">
-    <div class="workspace-toolbar"><div class="section-title">{{ icon('code') }}<h2>{{ 'Test your text' if playground else 'Masking workspace' }}</h2><span class="small-badge">UTF-8</span></div><div class="toolbar-actions"><button id="upload" class="button button-subtle" type="button">{{ icon('upload') }}Upload</button><button id="paste" class="button button-subtle" type="button">{{ icon('paste') }}Paste</button><button id="load-sample" class="button button-subtle" type="button">{{ icon('file') }}Sample</button><button id="clear" class="button button-subtle" type="button">{{ icon('clear') }}Clear</button></div></div>
-    <input id="file-input" type="file" accept=".txt,.log,.csv,.tsv,.json,.md,.xml,.yml,.yaml,.ini,.env,text/*" hidden>
+    <div class="workspace-toolbar"><div class="section-title">{{ icon('code') }}<h2>{{ 'Test your text' if playground else 'Masking workspace' }}</h2><span class="small-badge">UTF-8</span></div></div>
     <div class="editors">
         <section class="editor input-editor" aria-labelledby="input-label">
             <div class="editor-heading"><label id="input-label" for="input-log"><span class="editor-number">01</span> Input log</label><div class="segmented" aria-label="Input view"><button type="button" id="edit-view" aria-pressed="true">Edit</button><button type="button" id="detected-view" aria-pressed="false" disabled>Detections</button></div></div>
             <div class="editor-body" id="drop-zone"><textarea id="input-log" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-describedby="input-help input-count" placeholder="Paste your text, or drop a text file here…"></textarea><pre id="source-preview" class="code-preview" tabindex="0" aria-label="Highlighted original text" hidden></pre><div class="drop-hint">{{ icon('upload') }}Drop to load</div></div>
-            <div class="editor-footer"><span id="input-count">0 characters <span>·</span> 0 lines</span><span id="input-help">Plain text only</span></div>
+            <div class="editor-footer input-footer">
+                <div class="input-meta"><span id="input-count">0 characters · 0 lines</span><span id="input-help">Plain text only</span></div>
+                <div class="toolbar-actions" role="group" aria-label="Input actions"><button id="upload" class="button button-subtle" type="button">{{ icon('upload') }}Upload</button><button id="paste" class="button button-subtle" type="button">{{ icon('paste') }}Paste</button><button id="load-sample" class="button button-subtle" type="button">{{ icon('file') }}Sample</button><button id="clear" class="button button-subtle" type="button">{{ icon('clear') }}Clear</button></div>
+                <input id="file-input" type="file" accept=".txt,.log,.csv,.tsv,.json,.md,.xml,.yml,.yaml,.ini,.env,text/*" hidden>
+            </div>
         </section>
         <section class="editor output-editor" aria-labelledby="output-label">
             <div class="editor-heading"><h3 id="output-label"><span class="editor-number accent">02</span> Masked log</h3><div class="segmented" aria-label="Output view"><button type="button" id="masked-view" aria-pressed="true">Masked</button><button type="button" id="compare-view" aria-pressed="false" disabled>Compare</button></div></div>

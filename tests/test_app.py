@@ -152,6 +152,56 @@ class AppTest(unittest.TestCase):
                 reached = {0} | {edge["to"] for edge in machine["edges"]}
                 self.assertEqual(reached, set(range(len(machine["states"]))))
 
+    def test_machine_trace_follows_custom_input_and_exact_match(self):
+        cases = (
+            ("credit_card", "Card: 4444-5555-6666-7777 / 1111-2222-3333-4444"),
+            ("phone", "🧪 โทร: 111-222-3333\n081-123-4567"),
+            ("email", "Mail: jane@example.co.th. Next: a@test.com"),
+            ("email", "<user@sub.123.example.technology>"),
+            ("email", "a@b." + "c" * 2_000),
+            ("dob", "DOB:31/12/2000"),
+            ("dob", "DOB:\t 01/01/2549"),
+            ("address", "🧪 Address:689 ถนนสุขุมวิท"),
+            ("address", "Address:\t 987/654 road"),
+        )
+        for key, text in cases:
+            with self.subTest(rule=key, text=text[:80]):
+                response = self.client.post("/api/mask", json={"text": text, "trace_rule": key})
+                self.assertEqual(response.status_code, 200)
+                machine = response.get_json()["machine"]
+                match = RULE_MAP[key].pattern.search(text)
+                self.assertTrue(machine["matched"])
+                self.assertEqual(machine["input"], text)
+                self.assertEqual(machine["offset"], match.start())
+                self.assertEqual("".join(move["text"] for move in machine["trace"]), match.group())
+                state, position = 0, match.start()
+                for move in machine["trace"]:
+                    edge = machine["edges"][move["edge"]]
+                    self.assertEqual(edge["from"], state)
+                    self.assertEqual(move["start"], position)
+                    self.assertEqual(edge["to"], move["to"])
+                    state, position = move["to"], move["end"]
+                self.assertEqual(position, match.end())
+                self.assertEqual(machine["states"][state]["kind"], "accept")
+
+    def test_machine_trace_does_not_accept_invalid_input(self):
+        for key, text in (("credit_card", "1234-5678-9012-34567"), ("phone", "A111-222-3333"),
+                          ("email", "user@example.com123"), ("dob", "DOB:\n01/01/2000"),
+                          ("address", "Address: 12/3/4"), ("email", "No email here")):
+            with self.subTest(rule=key):
+                machine = self.client.post("/api/mask", json={"text": text, "trace_rule": key}).get_json()["machine"]
+                self.assertFalse(machine["matched"])
+                self.assertEqual(machine["trace"], [])
+
+    def test_machine_trace_is_optional_and_requires_an_enabled_rule(self):
+        self.assertNotIn("machine", self.client.post("/api/mask", json={"text": "a@b.co"}).get_json())
+        for key in (None, [], {}, True, "unknown"):
+            with self.subTest(rule=key):
+                response = self.client.post("/api/mask", json={"text": "hello", "trace_rule": key})
+                self.assertEqual(response.status_code, 400)
+        response = self.client.post("/api/mask", json={"text": "a@b.co", "rules": {"email": False}, "trace_rule": "email"})
+        self.assertEqual(response.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()
