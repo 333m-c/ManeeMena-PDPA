@@ -20,6 +20,8 @@ USER maneemena
 
 EXPOSE 8000
 
+ENV GITHUB_URL=https://github.com/333m-c/ManeeMena-PDPA
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/rules', timeout=3).close()"]
 
