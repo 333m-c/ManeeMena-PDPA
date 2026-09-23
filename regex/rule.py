@@ -102,8 +102,8 @@ def build_machine(steps) -> dict:
     return {"states": states, "edges": edges}
 
 
-def trace_machine(machine: dict, text: str, start: int, end: int) -> list:
-    """Find an accepting path for the exact span chosen by Python's regex.
+def trace_machine(machine: dict, text: str, start: int, end: int) -> tuple[list, dict | None]:
+    """Replay an accepting path, or the furthest path when every branch fails.
 
     Explore alternative NFA branches and check guards at their real positions.
     Keep predecessors instead of copying paths or recursing for long inputs.
@@ -118,20 +118,27 @@ def trace_machine(machine: dict, text: str, start: int, end: int) -> list:
     initial = (0, start)
     pending = [initial]
     previous = {initial: None}
+    furthest = initial
+
+    def replay(current):
+        moves = []
+        while previous[current] is not None:
+            parent, index = previous[current]
+            moves.append({"edge": index, "to": current[0], "start": parent[1],
+                          "end": current[1], "text": text[parent[1]:current[1]]})
+            current = parent
+        return moves[::-1]
+
     while pending:
         state, position = current = pending.pop()
+        if (position, state) > (furthest[1], furthest[0]):
+            furthest = current
         # Accept-state guards apply when leaving its final repetition, not
         # between characters consumed by a loop on that state.
         if (state != accept or position == end) and not all(guard.match(text, position) for guard in guards[state]):
             continue
         if state == accept and position == end:
-            moves = []
-            while previous[current] is not None:
-                parent, index = previous[current]
-                moves.append({"edge": index, "to": current[0], "start": parent[1],
-                              "end": current[1], "text": text[parent[1]:current[1]]})
-                current = parent
-            return moves[::-1]
+            return replay(current), None
         for index in reversed(outgoing[state]):
             edge = edges[index]
             if edge["kind"] == "skip":
@@ -143,7 +150,19 @@ def trace_machine(machine: dict, text: str, start: int, end: int) -> list:
             if target not in previous:
                 previous[target] = (current, index)
                 pending.append(target)
-    return []
+    state, position = furthest
+    failed_guards = [guard for guard, test in zip(machine["states"][state]["guards"], guards[state])
+                     if not test.match(text, position)]
+    failure = {
+        "state": state,
+        "position": position,
+        "character": text[position] if position < len(text) else None,
+        "reason": "guard" if failed_guards else "incomplete" if position == end else "unexpected",
+        "expected": list(dict.fromkeys(edges[index]["symbol"] for index in outgoing[state]
+                                       if edges[index]["kind"] != "skip")),
+        "guards": failed_guards,
+    }
+    return replay(furthest), failure
 
 
 @dataclass(frozen=True)
@@ -171,7 +190,7 @@ class Rule:
         return self.pattern.sub(self.replace, text)
 
     def machine(self, text: str | None = None) -> dict:
-        """States, transitions and a replay of the first match in the input."""
+        """Replay the first match, or a rejected attempt from the first character."""
         if text is None:
             text = self.sample
         machine = build_machine(self.steps)
@@ -179,7 +198,8 @@ class Rule:
         machine["input"] = text
         machine["matched"] = match is not None
         machine["offset"] = match.start() if match else 0
-        machine["trace"] = trace_machine(machine, text, match.start(), match.end()) if match else []
+        machine["trace"], machine["failure"] = trace_machine(
+            machine, text, machine["offset"], match.end() if match else len(text))
         return machine
 
     def public(self) -> dict:

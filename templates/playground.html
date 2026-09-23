@@ -4,7 +4,18 @@
 {% block title %}Regex Playground{% endblock %}
 {% block content %}
 <section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> UNDERSTAND THE MATCH</div><h1>Small patterns. <span>Drawn as machines.</span></h1></div><span class="outline-badge">{{ icon('code') }} Python re</span></section>
-<div class="pattern-selector panel" role="group" aria-label="Select a regex rule">{% for rule in rules %}<button type="button" class="pattern-choice rule-{{ rule.key }}" data-rule="{{ rule.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ rule.label }}</button>{% endfor %}</div>
+<section class="rules-section" aria-labelledby="rules-heading">
+    <div class="rules-header"><h2 id="rules-heading">Pattern type</h2><span class="muted small">Select one rule</span></div>
+    <div class="rule-grid pattern-selector" role="group" aria-label="Select a regex rule">
+        {% set glyphs = {'credit_card': 'card', 'email': 'email', 'phone': 'phone', 'dob': 'calendar', 'address': 'pin'} %}
+        {% for rule in rules %}
+        <button type="button" class="rule-toggle pattern-choice rule-{{ rule.key }}" data-rule="{{ rule.key }}" aria-label="{{ rule.label }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">
+            <span class="rule-glyph">{{ icon(glyphs[rule.key]) }}</span>
+            <span class="rule-name">{{ rule.label }}<small><span class="pattern-indicator" aria-hidden="true"></span><span class="pattern-status">{{ 'Selected' if loop.first else 'Select pattern' }}</span></small></span>
+        </button>
+        {% endfor %}
+    </div>
+</section>
 {{ workspace(true) }}
 <section class="panel machine-panel" aria-labelledby="machine-heading">
     <div class="panel-heading">
@@ -15,9 +26,10 @@
             <button type="button" id="machine-reset" class="button button-subtle">{{ icon('reset') }}Reset</button>
         </div>
     </div>
-    <p class="machine-help">Uses the Input log above. Edit your text, then run or step through its first match.</p>
+    <p class="machine-help">Run or step through the first match in Input log. If nothing matches, the machine starts at the first character and shows where it rejects. An NFA shows the path that reads furthest when all paths fail.</p>
     <div id="machine-canvas" class="machine-canvas" role="img" aria-labelledby="machine-heading machine-caption"></div>
     <div id="machine-tape" class="machine-tape"></div>
+    <p id="machine-result" class="machine-result" role="status" aria-live="polite" hidden></p>
     <p id="machine-caption" class="machine-caption" role="status" aria-live="polite"></p>
     <div class="machine-legend">
         <span><i class="legend-state"></i>state</span>

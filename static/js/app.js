@@ -203,8 +203,8 @@
   async function scan() {
     invalidate("Scanning your text…");
     const text = input.value;
-    if (!text.trim() || characters(text).length > limit) {
-      setText("scan-error", !text.trim() ? "Enter some text to scan." : "Keep your input within 50,000 characters.");
+    if ((!playground && !text.trim()) || characters(text).length > limit) {
+      setText("scan-error", !playground && !text.trim() ? "Enter some text to scan." : "Keep your input within 50,000 characters.");
       $("scan-error").hidden = false;
       setText("scan-status", "Your text has not been sent.");
       input.focus();
@@ -551,7 +551,8 @@
 
   function renderTape(current) {
     const points = characters(current.input);
-    const last = current.trace.length ? current.trace[current.trace.length - 1].end : current.offset;
+    const last = current.failure ? Math.min(points.length, current.failure.position + 1)
+      : current.trace.length ? current.trace[current.trace.length - 1].end : current.offset;
     const fragment = document.createDocumentFragment();
     const plain = (text) => {
       if (!text) return;
@@ -565,45 +566,69 @@
       const cell = document.createElement("span");
       cell.className = "tape-cell";
       cell.dataset.index = index;
-      cell.textContent = points[index] === " " ? "␣" : points[index];
+      cell.textContent = ({ " ": "␣", "\t": "⇥", "\n": "↵", "\r": "␍" })[points[index]] || points[index];
       fragment.append(cell);
+    }
+    if (current.failure?.position === points.length) {
+      const end = document.createElement("span");
+      end.className = "tape-cell tape-end";
+      end.dataset.index = points.length;
+      end.textContent = "EOF";
+      end.title = "End of input";
+      fragment.append(end);
     }
     plain(points.slice(last).join(""));
     $("machine-tape").replaceChildren(fragment);
   }
 
   function showTrace() {
-    const move = traceStep >= 0 ? machine.trace[traceStep] : null;
-    const state = move ? move.to : 0;
-    const head = move ? move.end : machine.offset;
+    const rejected = machineReady && !!machine.failure && traceStep === machine.trace.length;
+    const move = traceStep >= 0 ? machine.trace[Math.min(traceStep, machine.trace.length - 1)] : null;
+    const state = rejected ? machine.failure.state : move ? move.to : 0;
+    const head = rejected ? machine.failure.position : move ? move.end : machine.offset;
     const canvas = $("machine-canvas");
-    canvas.querySelectorAll(".state").forEach((node) => node.classList.toggle("current", Number(node.dataset.state) === state));
-    canvas.querySelectorAll(".edge").forEach((node) => node.classList.toggle("active", !!move && Number(node.dataset.edge) === move.edge));
+    canvas.querySelectorAll(".state").forEach((node) => {
+      node.classList.toggle("current", Number(node.dataset.state) === state);
+      node.classList.toggle("rejected", rejected && Number(node.dataset.state) === state);
+    });
+    canvas.querySelectorAll(".edge").forEach((node) => node.classList.toggle("active", !rejected && !!move && Number(node.dataset.edge) === move.edge));
     $("machine-tape").querySelectorAll(".tape-cell").forEach((cell) => {
       const index = Number(cell.dataset.index);
       cell.classList.toggle("read", index < head);
       cell.classList.toggle("head", index === head);
+      cell.classList.toggle("rejected", rejected && index === head);
     });
-    const done = machineReady && traceStep >= machine.trace.length - 1;
+    const done = machineReady && traceStep >= machineStepCount() - 1;
+    const accepted = done && machine.matched && machine.states[state].kind === "accept";
+    $("machine-result").hidden = !accepted && !rejected;
+    $("machine-result").dataset.outcome = accepted ? "accepted" : rejected ? "rejected" : "";
+    setText("machine-result", accepted ? "Accepted" : rejected ? "Rejected" : "");
     updateMachineControls();
     if (!machineReady) {
-      setText("machine-caption", !input.value.trim()
-        ? "Enter text in Input log above, or load a sample."
+      setText("machine-caption", !input.value
+        ? "Run input or Step to test the empty input, or enter text above."
         : characters(input.value).length > limit
           ? "Keep your input within 50,000 characters."
           : "Input changed. Run input, Step or Test pattern to update the machine.");
       return;
     }
-    if (!machine.matched) {
-      setText("machine-caption", "No match for this pattern in your input. Edit Input log and try again.");
-      return;
-    }
-    if (!machine.trace.length) {
-      setText("machine-caption", "A match was found, but its path could not be drawn.");
+    if (rejected) {
+      const failure = machine.failure;
+      const found = failure.character === null ? "end of input"
+        : ({ " ": "a space", "\t": "a tab", "\n": "a line break", "\r": "a carriage return" })[failure.character]
+          || `“${failure.character}”`;
+      const location = failure.character === null ? `at the end of input (after ${head} characters)`
+        : `before ${found} at character ${head + 1}`;
+      const reason = failure.reason === "guard"
+        ? `Boundary check failed: ${failure.guards.map((guard) => `${guard.symbol} · ${guard.meaning}`).join(" ")}`
+        : `Expected ${failure.expected.join(" or ") || "the end of the pattern"}.`;
+      setText("machine-caption", `Rejected · ${machine.states[state].id} stopped ${location}. ${reason}`);
       return;
     }
     if (!move) {
-      setText("machine-caption", `${machine.states[0].id} is the start state. Step through the first match in your input.`);
+      setText("machine-caption", machine.matched
+        ? `${machine.states[0].id} is the start state. Step through the first match in your input.`
+        : "No match was found. Run input or Step to follow an attempt from the first character and see why it rejects.");
       return;
     }
     const edge = machine.edges[move.edge];
@@ -611,16 +636,19 @@
     const action = edge.kind === "skip"
       ? `takes the ε bypass to ${machine.states[move.to].id}`
       : `reads “${move.text}” and ${destination}`;
-    const accepted = done && machine.matched && machine.states[move.to].kind === "accept";
     setText("machine-caption", `${machine.states[edge.from].id} ${action} · ${edge.meaning}${accepted ? " · accepted" : ""}`);
   }
 
+  function machineStepCount() {
+    return machine ? machine.trace.length + (machine.failure ? 1 : 0) : 0;
+  }
+
   function updateMachineControls() {
-    const unavailable = $("scan").disabled || !input.value.trim() || characters(input.value).length > limit
-      || (machineReady && !machine?.trace.length);
+    const unavailable = $("scan").disabled || characters(input.value).length > limit
+      || (machineReady && !machineStepCount());
     $("machine-play").disabled = unavailable;
-    $("machine-step").disabled = unavailable || (machineReady && traceStep >= machine.trace.length - 1);
-    $("machine-reset").disabled = $("scan").disabled || !machineReady || !machine?.trace.length;
+    $("machine-step").disabled = unavailable || (machineReady && traceStep >= machineStepCount() - 1);
+    $("machine-reset").disabled = $("scan").disabled || !machineReady || !machineStepCount();
   }
 
   function stopPlaying() {
@@ -641,21 +669,21 @@
     traceStep = -1;
     const sample = machines[selectedRule];
     machineReady = input.value === sample.input;
-    machine = machineReady ? sample : { ...sample, input: input.value, offset: 0, trace: [], matched: null };
+    machine = machineReady ? sample : { ...sample, input: input.value, offset: 0, trace: [], matched: null, failure: null };
     renderTape(machine);
     showTrace();
   }
 
   async function prepareMachine() {
     if (!machineReady && !await scan()) return false;
-    return machineReady && machine.matched && machine.trace.length > 0;
+    return machineReady && machineStepCount() > 0;
   }
 
   function stepMachine() {
-    if (!machine || traceStep >= machine.trace.length - 1) return false;
+    if (!machine || traceStep >= machineStepCount() - 1) return false;
     traceStep += 1;
     showTrace();
-    return traceStep < machine.trace.length - 1;
+    return traceStep < machineStepCount() - 1;
   }
 
   if (playground) {
@@ -674,7 +702,7 @@
         return;
       }
       if (!await prepareMachine()) return;
-      if (traceStep >= machine.trace.length - 1) traceStep = -1;
+      if (traceStep >= machineStepCount() - 1) traceStep = -1;
       setText("machine-play-label", "Pause");
       $("machine-play").classList.add("playing");
       showTrace();
@@ -702,7 +730,11 @@
     const useSample = !machine || input.value === ruleMap[selectedRule].sample;
     selectedRule = key;
     const rule = ruleMap[key];
-    document.querySelectorAll(".pattern-choice").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.rule === key)));
+    document.querySelectorAll(".pattern-choice").forEach((button) => {
+      const selected = button.dataset.rule === key;
+      button.setAttribute("aria-pressed", String(selected));
+      button.querySelector(".pattern-status").textContent = selected ? "Selected" : "Select pattern";
+    });
     setText("pattern-label", rule.label.toUpperCase());
     setText("pattern-code", rule.pattern);
     setText("pattern-description", rule.description);

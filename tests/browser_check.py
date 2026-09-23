@@ -275,13 +275,13 @@ class BrowserTest(unittest.TestCase):
         expect(page.locator("#machine-play-label")).to_have_text("Run input")
         expect(page.locator(".edge.active")).to_have_count(0)
         page.locator("#machine-play").click()
-        expect(page.locator("#machine-caption")).to_contain_text("No match")
-        expect(page.locator("#machine-step")).to_be_disabled()
+        expect(page.locator("#machine-play-label")).to_have_text("Pause")
+        expect(page.locator("#machine-step")).to_be_enabled()
         page.locator('.pattern-choice[data-rule="phone"]').click()
         expect(page.locator("#input-log")).to_have_value("user@example.com123")
         page.locator("#clear").click()
         expect(page.locator("#machine-tape")).to_be_empty()
-        expect(page.locator("#machine-play")).to_be_disabled()
+        expect(page.locator("#machine-play")).to_be_enabled()
         page.locator("#load-sample").click()
         expect(page.locator("#machine-play")).to_be_enabled()
 
@@ -298,6 +298,68 @@ class BrowserTest(unittest.TestCase):
         page.locator("#machine-step").click()
         expect(page.locator(".tape-cell.read")).to_have_count(1)
         self.assertEqual("".join(page.locator(".tape-cell").all_text_contents()), "555-666-7777")
+
+    def test_machine_replays_rejection_and_can_reset_or_edit(self):
+        page = self.page
+        page.goto(self.url + "/regex-playground")
+        page.locator('.pattern-choice[data-rule="phone"]').click()
+        page.locator("#input-log").fill("111-22x-3333")
+        page.locator("#machine-step").click()
+        expect(page.locator(".tape-cell.read")).to_have_count(1)
+        expect(page.locator("#machine-result")).to_be_hidden()
+        for _ in range(5):
+            page.locator("#machine-step").click()
+        expect(page.locator(".tape-cell.read")).to_have_count(6)
+        expect(page.locator("#machine-result")).to_be_hidden()
+        page.locator("#machine-step").click()
+        expect(page.locator("#machine-result")).to_have_text("Rejected")
+        expect(page.locator("#machine-caption")).to_contain_text("character 7")
+        expect(page.locator("#machine-caption")).to_contain_text("Expected [0-9]")
+        expect(page.locator(".tape-cell.rejected")).to_have_text("x")
+        expect(page.locator(".state.rejected .state-label")).to_have_text("q6")
+        expect(page.locator("#machine-step")).to_be_disabled()
+        expect(page.locator("#machine-play")).to_be_enabled()
+        expect(page.locator("#output-log")).to_have_text("111-22x-3333")
+        page.locator(".machine-panel").screenshot(path=str(self.artifacts / "machine-rejected.png"))
+        page.locator("#machine-reset").click()
+        expect(page.locator("#machine-result")).to_be_hidden()
+        expect(page.locator(".tape-cell.read, .tape-cell.rejected, .state.rejected")).to_have_count(0)
+        page.locator("#machine-play").click()
+        expect(page.locator("#machine-result")).to_have_text("Rejected", timeout=8000)
+        expect(page.locator("#machine-play-label")).to_have_text("Run input")
+        page.locator("#input-log").fill("111-222-3333")
+        expect(page.locator("#machine-result")).to_be_hidden()
+        expect(page.locator(".state.rejected")).to_have_count(0)
+        for _ in range(12):
+            page.locator("#machine-step").click()
+        expect(page.locator("#machine-result")).to_have_text("Accepted")
+
+    def test_machine_rejects_empty_input_incomplete_input_and_boundaries(self):
+        page = self.page
+        page.goto(self.url + "/regex-playground")
+        cases = (
+            ("phone", "", "end of input", "EOF"),
+            ("phone", " ", "a space", "␣"),
+            ("phone", "🧪", "character 1", "🧪"),
+            ("phone", "111-222-333", "Expected [0-9]", "EOF"),
+            ("credit_card", "1234-5678-9012-34567", "Boundary check failed", "7"),
+            ("email", "a@b.c.d", "Expected [A-Za-z]", "EOF"),
+            ("dob", "DOB:\n01/01/2000", "a line break", "↵"),
+            ("address", "Address: 12/3/4", "Boundary check failed", "/"),
+        )
+        for key, text, message, blocked in cases:
+            with self.subTest(rule=key, text=text):
+                page.locator(f'.pattern-choice[data-rule="{key}"]').click()
+                page.locator("#input-log").fill(text)
+                self.scan()
+                expect(page.locator("#machine-step")).to_be_enabled()
+                for _ in range(len(text) + 20):
+                    if page.locator("#machine-step").is_disabled():
+                        break
+                    page.locator("#machine-step").click()
+                expect(page.locator("#machine-result")).to_have_text("Rejected")
+                expect(page.locator("#machine-caption")).to_contain_text(message)
+                expect(page.locator(".tape-cell.rejected")).to_have_text(blocked)
 
     def test_machine_ignores_stale_response_and_recovers_from_failure(self):
         page = self.page

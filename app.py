@@ -59,7 +59,7 @@ def create_app(test_config=None):
         if not isinstance(payload, dict):
             return error("The request must be a JSON object.")
         text = payload.get("text")
-        if not isinstance(text, str) or not text.strip():
+        if not isinstance(text, str) or (not text.strip() and "trace_rule" not in payload):
             return error("Enter some text to scan.")
         if len(text) > MAX_CHARACTERS:
             return error("Keep your input within 50,000 characters.", 413)

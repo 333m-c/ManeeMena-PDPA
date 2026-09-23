@@ -171,6 +171,7 @@ class AppTest(unittest.TestCase):
                 machine = response.get_json()["machine"]
                 match = RULE_MAP[key].pattern.search(text)
                 self.assertTrue(machine["matched"])
+                self.assertIsNone(machine["failure"])
                 self.assertEqual(machine["input"], text)
                 self.assertEqual(machine["offset"], match.start())
                 self.assertEqual("".join(move["text"] for move in machine["trace"]), match.group())
@@ -185,13 +186,43 @@ class AppTest(unittest.TestCase):
                 self.assertEqual(machine["states"][state]["kind"], "accept")
 
     def test_machine_trace_does_not_accept_invalid_input(self):
-        for key, text in (("credit_card", "1234-5678-9012-34567"), ("phone", "A111-222-3333"),
-                          ("email", "user@example.com123"), ("dob", "DOB:\n01/01/2000"),
-                          ("address", "Address: 12/3/4"), ("email", "No email here")):
-            with self.subTest(rule=key):
-                machine = self.client.post("/api/mask", json={"text": text, "trace_rule": key}).get_json()["machine"]
+        cases = (
+            ("credit_card", "1234-5678-9012-34567", 19, "guard"),
+            ("phone", "A111-222-3333", 0, "unexpected"),
+            ("phone", "111-22x-3333", 6, "unexpected"),
+            ("phone", "111-222-333", 11, "incomplete"),
+            ("phone", "123🧪", 3, "unexpected"),
+            ("phone", "", 0, "incomplete"),
+            ("phone", " \t\n", 0, "unexpected"),
+            ("email", "user@example.com123", 19, "incomplete"),
+            ("email", "a@b.c.d", 7, "incomplete"),
+            ("email", "a" * 2_000, 2_000, "incomplete"),
+            ("dob", "DOB:\n01/01/2000", 4, "unexpected"),
+            ("address", "Address: 12/3/4", 13, "guard"),
+            ("email", "No email here", 2, "unexpected"),
+        )
+        for key, text, position, reason in cases:
+            with self.subTest(rule=key, text=text[:80]):
+                response = self.client.post("/api/mask", json={"text": text, "trace_rule": key})
+                self.assertEqual(response.status_code, 200)
+                machine = response.get_json()["machine"]
                 self.assertFalse(machine["matched"])
-                self.assertEqual(machine["trace"], [])
+                self.assertEqual(machine["offset"], 0)
+                failure = machine["failure"]
+                self.assertEqual(failure["position"], position)
+                self.assertEqual(failure["reason"], reason)
+                self.assertEqual(failure["character"], text[position] if position < len(text) else None)
+                self.assertEqual("".join(move["text"] for move in machine["trace"]), text[:position])
+                state, cursor = 0, 0
+                for move in machine["trace"]:
+                    edge = machine["edges"][move["edge"]]
+                    self.assertEqual(edge["from"], state)
+                    self.assertEqual(move["start"], cursor)
+                    self.assertEqual(edge["to"], move["to"])
+                    state, cursor = move["to"], move["end"]
+                self.assertEqual(failure["state"], state)
+                self.assertEqual(cursor, position)
+                self.assertTrue(failure["guards"] if reason == "guard" else failure["expected"])
 
     def test_machine_trace_is_optional_and_requires_an_enabled_rule(self):
         self.assertNotIn("machine", self.client.post("/api/mask", json={"text": "a@b.co"}).get_json())

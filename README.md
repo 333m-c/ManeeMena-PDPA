@@ -71,7 +71,7 @@ Use either the Compose or standalone command for port 8080, not both at once. Th
 | Statistics | Total matches, individual rule counts, original characters concealed and enabled rule count. |
 | Before / After | **Compare** highlights only replaced spans; separators and visible digits remain unhighlighted. |
 | Regex Playground | `/regex-playground` displays the actual compiled patterns and token explanations, with a sample and live test for each rule. |
-| State machine diagram | Each pattern is drawn as the automaton it expands to: one state per character read, self-loops for `+` and `*`, dashed ε arcs for optional parts and dashed rings for lookarounds. **Run input** and **Step** use the editable Input log above the graph and walk its first match. **Test pattern** also updates the graph; changing text clears the old walk. |
+| State machine diagram | Each pattern is drawn as the automaton it expands to: one state per character read, self-loops for `+` and `*`, dashed ε arcs for optional parts and dashed rings for lookarounds. **Run input** and **Step** walk the first match in Input log. If nothing matches, they try from the first character and replay the furthest NFA path before showing **Rejected**, the blocked character (or EOF), and the expected symbol or failed boundary check. A successful walk shows **Accepted**. **Test pattern** also updates the graph; changing text clears the old walk. |
 | Rule toggles | Disable/enable each rule. Disabled rules are neither detected nor counted; all start enabled. |
 | Sample logs | Load a fictional customer log or choose one of three scenarios on `/examples`. |
 | About Us | `/about-us` shows one card per team member — nickname, student ID and full name — read from `team.py`. Fields left empty render as a blank line. |
@@ -283,11 +283,11 @@ Response:
 - Offsets are **zero-based Unicode code-point indexes**, end-exclusive. Lines are one-based; LF, CRLF and CR are supported. JavaScript uses `Array.from(text)` to avoid UTF-16/emoji offset errors.
 - `masked_characters` counts original characters replaced, never separators. Replacing `99/12` with `XX/XX` contributes four, because the slash is kept.
 - Omitted `rules`, or missing keys, default to enabled. Values must be JSON booleans; unknown rule keys are rejected.
-- Empty/whitespace-only text and malformed requests return HTTP 400. Non-JSON content returns 415. More than 50,000 code points or a body larger than 1 MiB returns 413.
+- Empty/whitespace-only text and malformed requests return HTTP 400. Playground requests with a valid `trace_rule` can also test empty/whitespace-only text to show rejection. Non-JSON content returns 415. More than 50,000 code points or a body larger than 1 MiB returns 413.
 - Errors use `{"success": false, "error": "..."}` without echoing the submitted log.
 - Responses contain masked previews and spans, not separate raw-match copies. Explicit reveal reads the existing input in browser memory.
 - `GET /api/rules` returns the actual compiled pattern strings, descriptions, token explanations and fictional examples.
-- Playground requests include `trace_rule` with an enabled rule key. The response then also includes `machine`: states, transitions, the submitted input, whether it matched, and a replay of its first match using Unicode code-point offsets. NFA branches are explored until the exact Python match is consumed; no-match input has an empty replay. Ordinary scans omit this field and keep the response above.
+- Playground requests include `trace_rule` with an enabled rule key. The response then also includes `machine`: states, transitions, the submitted input, whether it matched, and a replay using Unicode code-point offsets. An accepted replay consumes the exact first Python match and has `failure: null`. If no match exists, the replay starts at offset 0, explores all reachable NFA branches, and shows the path that reads furthest; `failure` gives the state, position, blocked character (`null` at EOF), reason, expected symbols, and failed guards. The rejection is displayed as a final step without consuming the blocked character. Ordinary scans omit this field and keep the response above.
 
 ## Example input and output
 
