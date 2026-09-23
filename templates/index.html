@@ -1,18 +1,13 @@
 {% extends 'base.html' %}
-{% from 'workspace.html' import workspace, inspector %}
+{% from 'workspace.html' import workspace, stats, inspector %}
 {% from 'icons.html' import icon %}
 {% block content %}
-<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> LESS EXPOSURE. MORE CONTROL.</div><h1>Sensitive data, <span>under cover.</span></h1><p>Find what’s personal. Mask what matters. Share your logs with more confidence.</p></div><a class="button button-secondary heading-action" href="{{ url_for('playground') }}">{{ icon('code') }}Explore the regex {{ icon('arrow') }}</a></section>
-<div class="stats-grid">
-    <article class="stat-card"><div class="stat-label">Sensitive matches {{ icon('scan') }}</div><div class="stat-value" id="stat-detected">—</div><div class="stat-caption" id="stat-detected-caption">Across your enabled rules</div></article>
-    <article class="stat-card"><div class="stat-label">Characters masked {{ icon('shield') }}</div><div class="stat-value" id="stat-masked">—</div><div class="stat-caption">Original characters concealed</div></article>
-    <article class="stat-card"><div class="stat-label">Active rules {{ icon('code') }}</div><div class="stat-value"><span id="stat-rules">05</span><span class="stat-denominator">/ 05</span></div><div class="stat-caption"><span class="status-dot"></span> You choose what to protect</div></article>
-    <article class="stat-card risk-card"><div class="stat-label">Demo Privacy Risk Score {{ icon('chart') }}</div><div class="stat-value risk-value" id="stat-risk">Not scanned</div><div class="risk-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><div class="stat-caption">Demo only · not a compliance score</div></article>
-</div>
-<section class="rules-section" aria-labelledby="rules-heading"><div class="rules-header"><h2 id="rules-heading">Masking rules</h2><span>Toggle what your scan looks for</span><button type="button" id="toggle-all" class="text-button">Disable all</button></div><div class="rule-grid">
+<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> LESS EXPOSURE. MORE CONTROL.</div><h1>Sensitive data, <span>under cover.</span></h1></div><a class="button button-secondary heading-action" href="{{ url_for('playground') }}">{{ icon('code') }}Explore the regex {{ icon('arrow') }}</a></section>
+<section class="rules-section" aria-labelledby="rules-heading"><div class="rules-header"><h2 id="rules-heading">Masking rules</h2><button type="button" id="toggle-all" class="text-button">Disable all</button></div><div class="rule-grid">
 {% set glyphs = {'credit_card': 'card', 'email': 'email', 'phone': 'phone', 'dob': 'calendar', 'address': 'pin'} %}
 {% for rule in rules %}<label class="rule-toggle rule-{{ rule.key }}"><span class="rule-glyph">{{ icon(glyphs[rule.key]) }}</span><span class="rule-name">{{ rule.label }}<small id="count-{{ rule.key }}">Ready to detect</small></span><input type="checkbox" class="rule-checkbox" value="{{ rule.key }}" checked><span class="switch" aria-hidden="true"></span></label>{% endfor %}
 </div></section>
 {{ workspace() }}
-<div class="bottom-grid">{{ inspector() }}<aside class="how-it-works panel"><span class="eyebrow">SMALL PATTERNS. REAL PURPOSE.</span><h2>Behind the mask</h2><div class="workflow-step"><span>1</span><div><strong>Detect the pattern</strong><p>Python regex finds five types of personal information.</p></div></div><div class="workflow-step"><span>2</span><div><strong>Keep the useful parts</strong><p>Mask the sensitive characters. Preserve the context.</p></div></div><div class="workflow-step"><span>3</span><div><strong>Inspect, then share</strong><p>Review each match before copying or downloading.</p></div></div><a href="{{ url_for('playground') }}">See how the patterns work {{ icon('arrow') }}</a></aside></div>
+{{ stats() }}
+{{ inspector() }}
 {% endblock %}

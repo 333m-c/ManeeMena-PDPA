@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from app import MAX_CHARACTERS, create_app
 from regex.masker import RULES, RULE_MAP
+from team import FIELDS, TEAM
 
 
 class AppTest(unittest.TestCase):
@@ -63,7 +64,7 @@ class AppTest(unittest.TestCase):
     def test_unicode_round_trip(self):
         text = "🧪 ทดสอบ\r\nAddress: 12/3 หมู่ 4"
         response = self.client.post("/api/mask", json={"text": text}).get_json()
-        self.assertEqual(response["masked_text"], "🧪 ทดสอบ\r\nAddress: XXX หมู่ 4")
+        self.assertEqual(response["masked_text"], "🧪 ทดสอบ\r\nAddress: XX/X หมู่ 4")
         self.assertEqual(response["detections"][0]["start"], text.index("Address:"))
 
     def test_invalid_unicode_is_rejected_without_server_error(self):
@@ -72,11 +73,33 @@ class AppTest(unittest.TestCase):
         self.assertEqual(response.get_json()["error"], "Use valid UTF-8 text.")
 
     def test_routes_render(self):
-        for path in ("/", "/regex-playground", "/examples", "/about"):
+        for path in ("/", "/regex-playground", "/examples", "/about-us"):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
                 self.assertIn('lang="en"', response.get_data(as_text=True))
+        self.assertEqual(self.client.get("/about").status_code, 404)
+
+    def test_about_us_shows_a_card_per_member(self):
+        page = self.client.get("/about-us").get_data(as_text=True)
+        self.assertEqual(len(TEAM), 10)
+        self.assertEqual(page.count('class="panel member-card"'), len(TEAM))
+        for _, label in FIELDS:
+            self.assertEqual(page.count(f"<dt>{label}</dt>"), len(TEAM))
+        # A blank line stands in for every field nobody has filled in yet.
+        blank = sum(not member[key] for member in TEAM for key, _ in FIELDS)
+        self.assertEqual(page.count('class="member-blank"'), blank)
+
+    def test_about_us_prints_the_details_it_is_given(self):
+        roster = [{"nickname": "ไชย", "english": "Chai", "student_id": "67011031",
+                   "full_name": "Somchai Jaidee"}]
+        with patch("app.TEAM", roster):
+            page = self.client.get("/about-us").get_data(as_text=True)
+        self.assertEqual(page.count('class="panel member-card"'), 1)
+        self.assertNotIn("member-blank", page)
+        for value in ("ไชย", "67011031", "Somchai Jaidee"):
+            self.assertIn(value, page)
+        self.assertIn('class="member-avatar">C<', page)  # from the romanised nickname
 
     def test_rule_catalog_has_real_patterns(self):
         self.assertEqual(self.client.get("/api/rules").get_json()["rules"], [rule.public() for rule in RULES])
@@ -101,13 +124,33 @@ class AppTest(unittest.TestCase):
         error.assert_not_called()
 
     def test_github_config_and_missing_link(self):
-        page = self.client.get("/about").get_data(as_text=True)
-        self.assertIn("Repository link not configured", page)
+        self.assertNotIn("Source code", self.client.get("/").get_data(as_text=True))
         self.app.config["GITHUB_URL"] = "https://github.com/example/assignment"
         self.assertIn('href="https://github.com/example/assignment"', self.client.get("/").get_data(as_text=True))
         for invalid in ("javascript:alert(1)", "https://example.com", "https://github.com@evil.example/path"):
             self.app.config["GITHUB_URL"] = invalid
-            self.assertIn("Repository link not configured", self.client.get("/about").get_data(as_text=True))
+            self.assertNotIn("Source code", self.client.get("/").get_data(as_text=True))
+
+    def test_machines_reach_the_playground_only(self):
+        playground = self.client.get("/regex-playground").get_data(as_text=True)
+        for rule in RULES:
+            self.assertIn(f'"{rule.key}": {{', playground)
+        self.assertIn("data-machines=\'{}\'", self.client.get("/").get_data(as_text=True))
+        self.assertNotIn("machine", self.client.get("/api/rules").get_data(as_text=True))
+
+    def test_every_machine_replays_its_own_sample(self):
+        """The drawn walk has to agree with what the real engine matches."""
+        for rule in RULES:
+            with self.subTest(rule=rule.key):
+                machine = rule.machine()
+                match = rule.pattern.search(rule.sample)
+                self.assertEqual(machine["offset"], match.start())
+                self.assertEqual("".join(move["text"] for move in machine["trace"]), match.group())
+                self.assertEqual(machine["trace"][-1]["to"], len(machine["states"]) - 1)
+                self.assertEqual(machine["states"][0]["kind"], "start")
+                self.assertEqual(machine["states"][-1]["kind"], "accept")
+                reached = {0} | {edge["to"] for edge in machine["edges"]}
+                self.assertEqual(reached, set(range(len(machine["states"]))))
 
 
 if __name__ == "__main__":

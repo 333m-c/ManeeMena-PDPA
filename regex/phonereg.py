@@ -1,7 +1,7 @@
 """Extend the original phone exercise to the assignment's hyphenated format."""
 
 import re
-from .rule import Rule, group_edit
+from .rule import Rule, Step, group_edit
 
 PATTERN = re.compile(r"(?<![\w-])(?P<first>[0-9]{3})-(?P<second>[0-9]{3})-(?P<last>[0-9]{4})(?![\w-])")
 
@@ -18,6 +18,13 @@ RULE = Rule(
      ("(?P<last>[0-9]{4})", "Capture the four digits that stay visible."),
      (r"(?![\w-])", "Require the complete number to end here.")),
     "Phone: 093-245-7894", _edits,
+    (Step(r"(?<![\w-])", "Left boundary: no word character or hyphen before the number.", guard=True),
+     Step("[0-9]", "Area digit, replaced with X.", times=3, masked=True),
+     Step(r"\-", "Literal hyphen, kept in the output.", row=True),
+     Step("[0-9]", "Prefix digit, replaced with X.", times=3, masked=True),
+     Step(r"\-", "Literal hyphen, kept in the output.", row=True),
+     Step("[0-9]", "Line digit, the four that stay visible.", times=4),
+     Step(r"(?![\w-])", "Right boundary: the number has to end here.", guard=True)),
 )
 
 

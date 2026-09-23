@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% from 'icons.html' import icon %}
+{% block title %}About Us{% endblock %}
+{% block content %}
+<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> THE PEOPLE BEHIND IT</div><h1>Ten names. <span>One assignment.</span></h1></div><span class="outline-badge">{{ icon('users') }} {{ team | length }} members</span></section>
+<div class="team-grid">
+{% for member in team %}<article class="panel member-card">
+    <div class="member-top"><span class="member-avatar">{{ initial(member.english) }}</span><span class="member-slot">{{ '%02d' % loop.index }}</span></div>
+    <dl class="member-fields">{% for key, label in fields %}<div><dt>{{ label }}</dt><dd class="member-{{ key }}">{% if member[key] %}{{ member[key] }}{% else %}<span class="member-blank"></span>{% endif %}</dd></div>{% endfor %}</dl>
+</article>{% endfor %}
+</div>
+{% endblock %}

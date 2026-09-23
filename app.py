@@ -8,6 +8,7 @@ from werkzeug.exceptions import BadRequest, RequestEntityTooLarge
 
 from regex.masker import RULES, RULE_MAP, mask_text
 from samples import SAMPLES
+from team import FIELDS, TEAM, initial
 
 MAX_CHARACTERS = 50_000
 
@@ -25,7 +26,7 @@ def create_app(test_config=None):
         parsed = urlparse(github)
         if parsed.scheme != "https" or parsed.hostname != "github.com" or parsed.username or parsed.password:
             github = ""
-        return {"rules": [rule.public() for rule in RULES], "samples": SAMPLES,
+        return {"rules": [rule.public() for rule in RULES], "samples": SAMPLES, "machines": {},
                 "github_url": github, "max_characters": MAX_CHARACTERS}
 
     @app.get("/")
@@ -34,15 +35,17 @@ def create_app(test_config=None):
 
     @app.get("/regex-playground")
     def playground():
-        return render_template("playground.html", page="playground")
+        # Only this page draws the automata, so their data stays off the others.
+        return render_template("playground.html", page="playground",
+                               machines={rule.key: rule.machine() for rule in RULES})
 
     @app.get("/examples")
     def examples():
         return render_template("examples.html", page="examples")
 
-    @app.get("/about")
-    def about():
-        return render_template("about.html", page="about")
+    @app.get("/about-us")
+    def about_us():
+        return render_template("about_us.html", page="team", team=TEAM, fields=FIELDS, initial=initial)
 
     @app.get("/api/rules")
     def rule_catalog():

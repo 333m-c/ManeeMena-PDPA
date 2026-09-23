@@ -3,8 +3,39 @@
 {% from 'icons.html' import icon %}
 {% block title %}Regex Playground{% endblock %}
 {% block content %}
-<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> UNDERSTAND THE MATCH</div><h1>Small patterns. <span>Clear explanations.</span></h1><p>Explore the exact Python regular expressions behind every masking rule.</p></div><span class="outline-badge">{{ icon('code') }} Python re</span></section>
-<div class="playground-layout"><section class="panel pattern-panel"><div class="panel-heading"><h2>Choose a pattern</h2><span class="small-badge">5 RULES</span></div><div class="pattern-selector" role="group" aria-label="Select a regex rule">{% for rule in rules %}<button type="button" class="pattern-choice" data-rule="{{ rule.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ rule.label }}</button>{% endfor %}</div><div class="pattern-content"><span class="eyebrow" id="pattern-label">CREDIT CARD</span><pre id="pattern-code" class="pattern-code"></pre><p id="pattern-description" class="muted"></p><div class="pattern-note">Pattern and explanations come from the same rule module used for scanning.</div></div></section><section class="panel breakdown-panel"><div class="panel-heading"><h2>Pattern breakdown</h2>{{ icon('code') }}</div><div id="pattern-tokens" class="token-list"></div></section></div>
+<section class="page-heading"><div><div class="eyebrow"><span class="tiny-line"></span> UNDERSTAND THE MATCH</div><h1>Small patterns. <span>Drawn as machines.</span></h1></div><span class="outline-badge">{{ icon('code') }} Python re</span></section>
+<div class="pattern-selector panel" role="group" aria-label="Select a regex rule">{% for rule in rules %}<button type="button" class="pattern-choice rule-{{ rule.key }}" data-rule="{{ rule.key }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ rule.label }}</button>{% endfor %}</div>
+<section class="panel machine-panel" aria-labelledby="machine-heading">
+    <div class="panel-heading">
+        <div class="section-title">{{ icon('graph') }}<h2 id="machine-heading">State machine</h2><span id="machine-badge" class="small-badge">NFA</span></div>
+        <div class="machine-controls">
+            <button type="button" id="machine-play" class="button button-subtle">{{ icon('play') }}<span id="machine-play-label">Run sample</span></button>
+            <button type="button" id="machine-step" class="button button-subtle">{{ icon('step') }}Step</button>
+            <button type="button" id="machine-reset" class="button button-subtle">{{ icon('reset') }}Reset</button>
+        </div>
+    </div>
+    <div id="machine-canvas" class="machine-canvas" role="img" aria-labelledby="machine-heading machine-caption"></div>
+    <div id="machine-tape" class="machine-tape"></div>
+    <p id="machine-caption" class="machine-caption"></p>
+    <div class="machine-legend">
+        <span><i class="legend-state"></i>state</span>
+        <span><i class="legend-accept"></i>accept</span>
+        <span><i class="legend-keep"></i>kept in output</span>
+        <span><i class="legend-mask"></i>masked in output</span>
+        <span><i class="legend-skip"></i>ε bypass</span>
+        <span><i class="legend-guard"></i>lookaround, reads nothing</span>
+    </div>
+</section>
+<div class="playground-layout">
+    <section class="panel pattern-panel">
+        <div class="panel-heading"><h2 id="pattern-label">CREDIT CARD</h2><span class="small-badge">PYTHON RE</span></div>
+        <div class="pattern-content"><pre id="pattern-code" class="pattern-code"></pre><p id="pattern-description" class="muted"></p></div>
+    </section>
+    <section class="panel breakdown-panel">
+        <div class="panel-heading"><h2>Pattern breakdown</h2>{{ icon('code') }}</div>
+        <div id="pattern-tokens" class="token-list"></div>
+    </section>
+</div>
 {{ workspace(true) }}
 {{ inspector() }}
 {% endblock %}

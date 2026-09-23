@@ -132,7 +132,7 @@ class BrowserTest(unittest.TestCase):
         self.scan()
         page.locator("#detected-view").click()
         self.assertEqual(page.locator("#source-preview mark").all_text_contents(), ["Address: 99/12", "card@gmail.com"])
-        self.assertEqual(page.locator("#output-log mark").all_text_contents(), ["Address: XXX", "c**d@gmail.com"])
+        self.assertEqual(page.locator("#output-log mark").all_text_contents(), ["Address: XX/XX", "c**d@gmail.com"])
         self.assertEqual(page.locator("#output-log img").count(), 0)
         self.assertIsNone(page.evaluate("window.injected"))
         page.locator("#source-preview mark").last.focus()
@@ -185,7 +185,7 @@ class BrowserTest(unittest.TestCase):
             self.assertEqual(page.locator("#output-log").inner_text(), mask_text(rule["sample"], [rule["key"]])["masked_text"])
         page.screenshot(path=str(self.artifacts / "playground.png"), full_page=True)
 
-    def test_examples_about_and_github_placeholder(self):
+    def test_examples_feed_the_masker(self):
         page = self.page
         page.goto(self.url + "/examples")
         expect(page.locator(".example-card")).to_have_count(3)
@@ -193,10 +193,53 @@ class BrowserTest(unittest.TestCase):
         expect(page.locator("#input-log")).to_have_value(SAMPLES[1]["text"])
         self.scan()
         expect(page.locator("#stat-detected")).to_have_text("07")
-        page.get_by_role("link", name="View Source Code").first.click()
-        expect(page.locator("#source-code")).to_contain_text("Repository link not configured")
         page.get_by_role("link", name="Regex Playground", exact=True).click()
-        expect(page.locator("h1")).to_contain_text("Clear explanations")
+        expect(page.locator("h1")).to_contain_text("Drawn as machines")
+
+    def test_upload_paste_and_drop_fill_the_workspace(self):
+        page = self.page
+        page.goto(self.url)
+        log = "Email: taksin.k@mail.co.th\nPhone: 081-222-3344"
+        with page.expect_file_chooser() as event:
+            page.locator("#upload").click()
+        event.value.set_files({"name": "audit.log", "mimeType": "text/plain",
+                               "buffer": log.encode("utf-8")})
+        expect(page.locator("#input-log")).to_have_value(log)
+        expect(page.locator("#scan-status")).to_contain_text("Loaded audit.log")
+        self.scan()
+        expect(page.locator("#stat-detected")).to_have_text("02")
+        page.evaluate("navigator.clipboard.writeText('Card: 4444-5555-6666-7777')")
+        page.locator("#paste").click()
+        expect(page.locator("#input-log")).to_have_value("Card: 4444-5555-6666-7777")
+        page.evaluate("""() => {
+          const transfer = new DataTransfer();
+          transfer.items.add(new File(['DOB: 03/04/2545'], 'drop.txt', { type: 'text/plain' }));
+          const zone = document.getElementById('drop-zone');
+          zone.dispatchEvent(new DragEvent('dragover', { dataTransfer: transfer, bubbles: true }));
+          zone.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true }));
+        }""")
+        expect(page.locator("#input-log")).to_have_value("DOB: 03/04/2545")
+        expect(page.locator(".drop-hint")).to_be_hidden()
+
+    def test_machine_diagram_walks_every_sample(self):
+        page = self.page
+        page.goto(self.url + "/regex-playground")
+        for rule in page.request.get(self.url + "/api/rules").json()["rules"]:
+            page.locator(f'.pattern-choice[data-rule="{rule["key"]}"]').click()
+            expect(page.locator(".state-accept")).to_have_count(1)
+            expect(page.locator(".state.current .state-label")).to_have_text("q0")
+            steps = page.locator(".tape-cell").count()
+            for _ in range(steps + len(rule["pattern"])):
+                if page.locator("#machine-step").is_disabled():
+                    break
+                page.locator("#machine-step").click()
+            expect(page.locator("#machine-caption")).to_contain_text("accepted")
+            expect(page.locator(".tape-cell:not(.read)")).to_have_count(0)
+            self.assertEqual(page.locator(".state.current .state-label").inner_text(),
+                             page.locator(".state-accept .state-label").inner_text())
+            page.locator("#machine-reset").click()
+            expect(page.locator(".tape-cell.read")).to_have_count(0)
+        page.screenshot(path=str(self.artifacts / "machine.png"), full_page=True)
 
     def test_short_emails_and_demo_risk_levels(self):
         page = self.page
@@ -221,7 +264,7 @@ class BrowserTest(unittest.TestCase):
             page.locator("#compare-view").click()
             expect(page.locator("#source-preview")).to_be_visible()
             page.screenshot(path=str(self.artifacts / f"mobile-{width}.png"), full_page=True)
-            for path in ("/regex-playground", "/examples", "/about"):
+            for path in ("/regex-playground", "/examples", "/about-us"):
                 page.goto(self.url + path)
                 self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width, path)
 

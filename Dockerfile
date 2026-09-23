@@ -9,14 +9,14 @@ WORKDIR /app
 # Install dependencies separately so source edits can reuse the cached layer.
 COPY requirements.txt requirements-docker.txt ./
 RUN python -m pip install --no-cache-dir -r requirements-docker.txt \
-    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin veil
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin maneemena
 
-COPY app.py samples.py ./
+COPY app.py samples.py team.py ./
 COPY regex/ ./regex/
 COPY templates/ ./templates/
 COPY static/ ./static/
 
-USER veil
+USER maneemena
 
 EXPOSE 8000
 
