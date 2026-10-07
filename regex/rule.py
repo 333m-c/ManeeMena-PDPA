@@ -52,7 +52,15 @@ def literal(text: str, meaning: str, row: bool = False, wrap: int = 0) -> tuple:
 class Maybe:
     """A run of steps the machine may skip entirely, drawn as a bypass arc."""
 
-    steps: tuple[Step, ...]
+    steps: tuple
+    meaning: str
+
+
+@dataclass(frozen=True)
+class Choice:
+    """Alternative runs of steps, joined by epsilon transitions."""
+
+    branches: tuple[tuple, ...]
     meaning: str
 
 
@@ -70,34 +78,53 @@ def build_machine(steps) -> dict:
         states.append({"id": f"q{len(states)}", "kind": "read", "row": row, "guards": []})
         return len(states) - 1
 
-    def walk(items):
+    def skip(source, target, meaning):
+        edges.append({"from": source, "to": target, "symbol": "ε",
+                      "meaning": meaning, "kind": "skip", "masked": False})
+
+    def walk(items, current):
         nonlocal row
         for item in items:
             if isinstance(item, Maybe):
-                entry = len(states) - 1
-                walk(item.steps)
-                edges.append({"from": entry, "to": len(states) - 1, "symbol": "ε",
-                              "meaning": item.meaning, "kind": "skip", "masked": False})
+                entry = current
+                end = walk(item.steps, current)
+                # A bypass must not enter the last step's repetition loop.
+                current = add_state()
+                skip(end, current, "Continue after the optional group.")
+                skip(entry, current, item.meaning)
+                continue
+            if isinstance(item, Choice):
+                ends = []
+                for branch in item.branches:
+                    row += 1
+                    entry = add_state()
+                    skip(current, entry, item.meaning)
+                    ends.append(walk(branch, entry))
+                row += 1
+                current = add_state()
+                for end in ends:
+                    skip(end, current, item.meaning)
                 continue
             if item.row:
                 row += 1
             if item.guard:
-                states[-1]["guards"].append({"symbol": item.symbol, "meaning": item.meaning})
+                states[current]["guards"].append({"symbol": item.symbol, "meaning": item.meaning})
                 continue
-            entry = len(states) - 1
+            entry = current
             for _ in range(item.times):
-                source = len(states) - 1
+                source = current
                 target = add_state()
                 edges.append({"from": source, "to": target, "symbol": item.symbol,
                               "meaning": item.meaning, "kind": "read", "masked": item.masked})
+                current = target
             if item.loop:
-                edges.append({"from": len(states) - 1, "to": len(states) - 1, "symbol": item.symbol,
+                edges.append({"from": current, "to": current, "symbol": item.symbol,
                               "meaning": f"{item.meaning} (repeat)", "kind": "loop", "masked": item.masked})
             if item.optional:
-                edges.append({"from": entry, "to": len(states) - 1, "symbol": "ε",
-                              "meaning": f"{item.meaning} (may be absent)", "kind": "skip", "masked": False})
+                skip(entry, current, f"{item.meaning} (may be absent)")
+        return current
 
-    walk(steps)
+    walk(steps, 0)
     states[-1]["kind"] = "accept"
     return {"states": states, "edges": edges}
 

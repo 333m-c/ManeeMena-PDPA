@@ -1,7 +1,7 @@
 """Mask the house number only when the full Thai address format is present."""
 
 import re
-from .rule import Edit, Maybe, Rule, Step, literal
+from .rule import Choice, Edit, Maybe, Rule, Step, literal
 
 
 PATTERN = re.compile(
@@ -52,8 +52,8 @@ RULE = Rule(
     _edits,
     (
         Step(
-            r"(?<!\w)",
-            "Left boundary: Address: may not be inside a larger word.",
+            r"(?<![\w/\-])",
+            "Left boundary: Address: may not follow a word character, slash or hyphen.",
             guard=True
         ),
         *literal(
@@ -90,19 +90,58 @@ RULE = Rule(
             "Numbers such as 689 do not contain the optional slash part."
         ),
         Step(
-            r"[ \t]+",
+            r"[ \t]",
             "Whitespace separating the house number from the rest of the address.",
             loop=True
         ),
-        Step(
-            r".+",
-            "The remaining address must contain soi (optional), road, subdistrict, district and province."
+        Maybe(
+            (
+                *literal("ซอย", "A character of the optional soi label.", row=True),
+                Step(r"[ \t]", "Spaces or tabs after the soi label.", loop=True, optional=True),
+                Step(r"[\u0E00-\u0E7F]", "Thai character in the soi name.", loop=True),
+                Maybe(
+                    (
+                        Step(r"[ \t]", "Whitespace before the soi number.", loop=True, row=True),
+                        Step("[0-9]", "Soi-number digit, kept in the output.", loop=True),
+                    ),
+                    "The soi number may be absent."
+                ),
+                Step(r"[ \t]", "Whitespace after the soi.", loop=True),
+            ),
+            "The entire soi may be absent."
         ),
-        Step(
-            r"(?![\w/\-])",
-            "Right boundary: prevents matching only part of a longer token.",
-            guard=True
+        *literal("ถนน", "A character of the required road label.", row=True),
+        Step(r"[ \t]", "Spaces or tabs after the road label.", loop=True, optional=True),
+        Step(r"[\u0E00-\u0E7F]", "Thai character in the road name.", loop=True),
+        Step(r"[ \t]", "Whitespace after the road name.", loop=True),
+        Choice(
+            (
+                literal("แขวง", "A character of the subdistrict label แขวง."),
+                literal("ตำบล", "A character of the subdistrict label ตำบล."),
+            ),
+            "The subdistrict label is either แขวง or ตำบล."
         ),
+        Step(r"[ \t]", "Spaces or tabs after the subdistrict label.", loop=True, optional=True),
+        Step(r"[\u0E00-\u0E7F]", "Thai character in the subdistrict name.", loop=True),
+        Step(r"[ \t]", "Whitespace after the subdistrict name.", loop=True),
+        Choice(
+            (
+                literal("เขต", "A character of the district label เขต."),
+                literal("อำเภอ", "A character of the district label อำเภอ."),
+            ),
+            "The district label is either เขต or อำเภอ."
+        ),
+        Step(r"[ \t]", "Spaces or tabs after the district label.", loop=True, optional=True),
+        Step(r"[\u0E00-\u0E7F]", "Thai character in the district name.", loop=True),
+        Maybe(
+            (
+                Step(r"[ \t]", "Spaces or tabs before the province label.", loop=True, optional=True, row=True),
+                *literal("จังหวัด", "A character of the optional province label.", wrap=4),
+            ),
+            "The province label and its preceding whitespace may be absent."
+        ),
+        Step(r"[ \t]", "Required whitespace before the province name.", loop=True, row=True),
+        Step(r"[\u0E00-\u0E7F]", "Thai character in the required province name.", loop=True),
     ),
 )
 

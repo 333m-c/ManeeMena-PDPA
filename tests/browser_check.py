@@ -241,6 +241,39 @@ class BrowserTest(unittest.TestCase):
             expect(page.locator(".tape-cell.read")).to_have_count(0)
         page.screenshot(path=str(self.artifacts / "machine.png"), full_page=True)
 
+    def test_address_machine_run_reset_and_rejection(self):
+        page = self.page
+        page.goto(self.url + "/regex-playground")
+        page.locator('.pattern-choice[data-rule="address"]').click()
+        page.clock.install()
+        texts = (
+            page.locator("#input-log").input_value(),
+            "Address: 987/654 ถนนสุข ตำบลสวน อำเภอเมือง จังหวัด เชียงใหม่",
+            "Address: 12 a",
+        )
+        for text in texts:
+            with self.subTest(text=text):
+                page.locator("#input-log").fill(text)
+                self.scan()
+                page.locator("#machine-step").click()
+                expect(page.locator(".tape-cell.read")).to_have_count(1)
+                page.locator("#machine-reset").click()
+                expect(page.locator(".tape-cell.read")).to_have_count(0)
+                expect(page.locator(".state.current .state-label")).to_have_text("q0")
+                expect(page.locator("#machine-result")).to_be_hidden()
+                page.locator("#machine-play").click()
+                page.clock.run_for(620 * (len(text) + 50))
+                expected = "Rejected" if text == "Address: 12 a" else "Accepted"
+                expect(page.locator("#machine-result")).to_have_text(expected)
+                expect(page.locator("#machine-play-label")).to_have_text("Run input")
+                expect(page.locator("#machine-step")).to_be_disabled()
+                if expected == "Accepted":
+                    expect(page.locator(".state-accept.current")).to_have_count(1)
+                    expect(page.locator(".tape-cell:not(.read)")).to_have_count(0)
+                    page.locator(".machine-panel").screenshot(path=str(self.artifacts / "address-machine.png"))
+                else:
+                    expect(page.locator(".tape-cell.rejected")).to_have_text("a")
+
     def test_short_emails_and_demo_risk_levels(self):
         page = self.page
         page.goto(self.url)
@@ -345,7 +378,7 @@ class BrowserTest(unittest.TestCase):
             ("credit_card", "1234-5678-9012-34567", "Boundary check failed", "7"),
             ("email", "a@b.c.d", "Expected [A-Za-z]", "EOF"),
             ("dob", "DOB:\n01/01/2000", "a line break", "↵"),
-            ("address", "Address: 12/3/4", "Boundary check failed", "/"),
+            ("address", "Address: 12/3/4", r"Expected [ \t]", "/"),
         )
         for key, text, message, blocked in cases:
             with self.subTest(rule=key, text=text):

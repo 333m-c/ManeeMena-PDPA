@@ -161,8 +161,8 @@ class AppTest(unittest.TestCase):
             ("email", "a@b." + "c" * 2_000),
             ("dob", "DOB:31/12/2000"),
             ("dob", "DOB:\t 01/01/2549"),
-            ("address", "🧪 Address:689 ถนนสุขุมวิท"),
-            ("address", "Address:\t 987/654 road"),
+            ("address", "🧪 Address:689 ถนนสุขุมวิท แขวงคลองตัน เขตคลองเตย กรุงเทพฯ"),
+            ("address", "Address:\t 987/654 ถนนสุข ตำบลสวน อำเภอเมือง จังหวัด เชียงใหม่"),
         )
         for key, text in cases:
             with self.subTest(rule=key, text=text[:80]):
@@ -198,7 +198,7 @@ class AppTest(unittest.TestCase):
             ("email", "a@b.c.d", 7, "incomplete"),
             ("email", "a" * 2_000, 2_000, "incomplete"),
             ("dob", "DOB:\n01/01/2000", 4, "unexpected"),
-            ("address", "Address: 12/3/4", 13, "guard"),
+            ("address", "Address: 12/3/4", 13, "unexpected"),
             ("email", "No email here", 2, "unexpected"),
         )
         for key, text, position, reason in cases:

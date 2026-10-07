@@ -483,7 +483,19 @@
     rows.forEach((row, rowIndex) => row.forEach((state, index) => {
       at[state] = { x: MARGIN + RADIUS + index * column, y: tops[rowIndex] };
     }));
-    const width = MARGIN * 2 + RADIUS * 2 + (Math.max(...rows.map((row) => row.length)) - 1) * column;
+    const contentWidth = MARGIN * 2 + RADIUS * 2 + (Math.max(...rows.map((row) => row.length)) - 1) * column;
+    // Multi-row bypasses need outside lanes instead of diagonals through states.
+    const skipLanes = new Map();
+    const occupied = [];
+    current.edges.forEach((edge, index) => {
+      const firstRow = current.states[edge.from].row, lastRow = current.states[edge.to].row;
+      if (edge.kind !== "skip" || firstRow === lastRow) return;
+      let lane = occupied.findIndex((spans) => spans.every(([start, end]) => lastRow < start || firstRow > end));
+      if (lane === -1) { lane = occupied.length; occupied.push([]); }
+      occupied[lane].push([firstRow, lastRow]);
+      skipLanes.set(index, lane);
+    });
+    const width = contentWidth + (occupied.length ? occupied.length * 24 + 40 : 0);
     const height = tops[tops.length - 1] + RADIUS + EDGE_PAD + (hasSkip[hasSkip.length - 1] ? SKIP_ROOM : 0);
     const root = shape("svg", { viewBox: `0 0 ${width} ${height}`, width, height, class: "machine-svg" });
 
@@ -509,6 +521,13 @@
       if (edge.kind === "loop") {
         path = `M ${from.x - 11} ${from.y - RADIUS + 3} C ${from.x - 38} ${from.y - RADIUS - 36} ${from.x + 38} ${from.y - RADIUS - 36} ${from.x + 11} ${from.y - RADIUS + 3}`;
         label = { x: from.x, y: from.y - RADIUS - 32 };
+      } else if (skipLanes.has(index)) {
+        const lane = skipLanes.get(index);
+        const rail = contentWidth + 12 + lane * 24;
+        const startY = from.y + RADIUS + 12 + lane * 10;
+        const endY = to.y + RADIUS + 12 + lane * 10;
+        path = `M ${from.x} ${from.y + RADIUS + 2} V ${startY} H ${rail} V ${endY} H ${to.x} V ${to.y + RADIUS + 4}`;
+        label = { x: rail + 9, y: (startY + endY) / 2 };
       } else if (edge.kind === "skip") {
         path = `M ${from.x} ${from.y + RADIUS + 2} C ${from.x + 26} ${from.y + RADIUS + 40} ${to.x - 26} ${to.y + RADIUS + 40} ${to.x} ${to.y + RADIUS + 4}`;
         label = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + RADIUS + 54 };
@@ -516,7 +535,7 @@
         path = `M ${from.x + RADIUS + 3} ${from.y} L ${to.x - RADIUS - 5} ${to.y}`;
         label = { x: (from.x + to.x) / 2, y: from.y - 13 };
       } else {
-        const right = width - 16;
+        const right = contentWidth - 16;
         const left = 16;
         const lane = from.y + RADIUS + (hasSkip[current.states[edge.from].row] ? SKIP_ROOM : 0) + 22;
         const bend = 12;
